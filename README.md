@@ -27,12 +27,19 @@ your phone.
 - **Measurements** — mark two points with the measure tool (📏) and log the
   distance you measured (with your tape/laser) plus a label. Stored on the shot
   as a labeled line.
+- **Delete arrows** — long-press a floor arrow to remove it (this direction or
+  both), or manage everything from the ☰ panel.
 - **Manage any stop** — the ☰ panel lists every arrow, note and measurement on a
   shot so you can edit, delete, or re-set an arrow's arrival view.
 - **Revise a photo** — replace a shot's image while keeping all its arrows,
   notes and floor-plan position.
-- **Floor plan** — optionally set a floor-plan image, then place each shot as a
-  numbered dot. Tap a dot to jump there; links between shots are drawn for you.
+- **Multiple floors** — organize a building into floors (bookmarks). Each floor
+  has its own floor-plan image and its own shots; importing always lands on the
+  floor you're viewing, so levels never get mixed up.
+- **Floor plan** — set each floor's plan image, then place its shots as numbered
+  dots. Tap a dot to jump there; links between shots are drawn for you.
+- **Punch-list PDF** — export every pinned task to a PDF, each with a photo of
+  the exact spot (rendered from the 360°), its priority and its location.
 - **Backup & share** — export a whole tour as a single `.sitewalk` file and
   import it on another device.
 
@@ -98,7 +105,9 @@ into that.
 
 - Vanilla JS ES modules, no framework
 - [Three.js](https://threejs.org/) (vendored in `js/vendor/`) for the WebGL
-  panorama sphere
+  panorama sphere, and to render task photos for the PDF
+- [jsPDF](https://github.com/parallax/jsPDF) (vendored, lazy-loaded) for the
+  punch-list export
 - IndexedDB for offline storage of photos and tour data
 - A service worker + web manifest make it an installable, offline PWA
 
@@ -112,8 +121,9 @@ js/db.js                IndexedDB storage + export/import
 js/image.js             photo decode, downscale, thumbnails
 js/viewer.js            WebGL 360° panorama viewer + hotspots + gyro
 js/map.js               floor-plan canvas (place/drag/link dots)
+js/export.js            offscreen render + jsPDF punch-list export
 js/ui.js                modals, prompts, toasts, help
-js/vendor/              Three.js (bundled for offline use)
+js/vendor/              Three.js + jsPDF (bundled for offline use)
 service-worker.js       offline cache
 manifest.webmanifest    installable PWA metadata
 icons/                  app icons

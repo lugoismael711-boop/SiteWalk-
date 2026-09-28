@@ -91,6 +91,7 @@
 
       <!-- Map / floor plan pane -->
       <div id="pane-map" class="pane">
+        <div id="floorBar" class="floor-bar"></div>
         <div id="mapToolbar" class="map-toolbar">
           <button id="btnMapUpload" class="btn small">Set floor plan image</button>
           <span class="muted tiny">Tap the map to place the selected shot • drag dots to move</span>
@@ -102,6 +103,10 @@
 
       <!-- Grid of shots -->
       <div id="pane-grid" class="pane">
+        <div class="grid-toolbar">
+          <div id="floorBarGrid" class="floor-bar"></div>
+          <button id="btnExportTasks" class="btn small" title="Export pinned tasks to PDF">Tasks → PDF</button>
+        </div>
         <div id="shotGrid" class="shot-grid"></div>
         <button id="btnAddShot" class="fab" aria-label="Add shot">+</button>
       </div>

@@ -87,21 +87,44 @@ export async function putProject(project) {
   return project;
 }
 export async function createProject(name) {
+  const floorId = uid('f_');
   const project = {
     id: uid('p_'),
     name: name || 'Untitled tour',
     createdAt: Date.now(),
     updatedAt: Date.now(),
-    floorImageId: null,
+    floorImageId: null, // legacy; floors[] is the source of truth now
     coverSceneId: null,
+    floors: [{ id: floorId, name: 'Level 1', floorImageId: null }],
+    currentFloorId: floorId,
   };
   return putProject(project);
+}
+
+/* Ensure a project has the floors[] model (migrates legacy single-floor data).
+   Returns { changed } — true when scenes were updated and need re-persisting. */
+export function ensureFloors(project, scenes) {
+  let changed = false;
+  if (!project.floors || !project.floors.length) {
+    const fid = uid('f_');
+    project.floors = [{ id: fid, name: 'Level 1', floorImageId: project.floorImageId || null }];
+    project.currentFloorId = fid;
+    changed = true;
+  }
+  if (!project.currentFloorId || !project.floors.some((f) => f.id === project.currentFloorId)) {
+    project.currentFloorId = project.floors[0].id;
+    changed = true;
+  }
+  const first = project.floors[0].id;
+  (scenes || []).forEach((s) => { if (!s.floorId) { s.floorId = first; changed = true; } });
+  return { changed };
 }
 export async function deleteProject(id) {
   const scenes = await listScenes(id);
   for (const sc of scenes) await deleteScene(sc);
   const project = await getProject(id);
   if (project && project.floorImageId) await deleteBlob(project.floorImageId);
+  for (const f of (project && project.floors) || []) if (f.floorImageId) await deleteBlob(f.floorImageId);
   const store = await tx('projects', 'readwrite');
   await reqAsPromise(store.delete(id));
 }
@@ -144,6 +167,7 @@ export async function exportProject(projectId) {
   const blobIds = new Set();
   scenes.forEach((s) => { if (s.imageId) blobIds.add(s.imageId); if (s.thumbId) blobIds.add(s.thumbId); });
   if (project.floorImageId) blobIds.add(project.floorImageId);
+  (project.floors || []).forEach((f) => { if (f.floorImageId) blobIds.add(f.floorImageId); });
 
   const blobs = {};
   for (const id of blobIds) {
@@ -163,6 +187,13 @@ export async function importProject(data) {
     await putBlob(newId, dataURLtoBlob(dataUrl));
   }
   const p = data.project;
+  // Re-key floors and their images.
+  const floorIdMap = {};
+  const newFloors = (p.floors || []).map((f) => {
+    const nid = uid('f_');
+    floorIdMap[f.id] = nid;
+    return { ...f, id: nid, floorImageId: idMap[f.floorImageId] || null };
+  });
   const newProject = {
     ...p,
     id: uid('p_'),
@@ -170,13 +201,16 @@ export async function importProject(data) {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     floorImageId: idMap[p.floorImageId] || null,
+    floors: newFloors.length ? newFloors : undefined,
+    currentFloorId: floorIdMap[p.currentFloorId] || (newFloors[0] && newFloors[0].id) || undefined,
   };
   const sceneIdMap = {};
   const newScenes = (data.scenes || []).map((s) => {
     const nid = uid('s_');
     sceneIdMap[s.id] = nid;
     return { ...s, id: nid, projectId: newProject.id,
-      imageId: idMap[s.imageId] || null, thumbId: idMap[s.thumbId] || null };
+      imageId: idMap[s.imageId] || null, thumbId: idMap[s.thumbId] || null,
+      floorId: floorIdMap[s.floorId] || null };
   });
   // Fix hotspot targets & cover to new scene ids.
   newScenes.forEach((s) => {
@@ -185,6 +219,8 @@ export async function importProject(data) {
     });
   });
   newProject.coverSceneId = sceneIdMap[p.coverSceneId] || (newScenes[0] && newScenes[0].id) || null;
+  // Migration safety-net for files exported before floors existed.
+  ensureFloors(newProject, newScenes);
 
   await putProject(newProject);
   for (const s of newScenes) await putScene(s);

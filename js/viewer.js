@@ -67,8 +67,11 @@ export class PanoramaViewer {
     this._measureFirst = null;
 
     this.onHotspotActivate = null;
+    this.onHotspotMenu = null;   // long-press on a hotspot
     this.onPlace = null;
     this.onMeasureFirstPoint = null;
+    this._lpTimer = null;
+    this._lpFired = false;
 
     this._gyroEnabled = false;
     this._gyroQuat = new THREE.Quaternion();
@@ -288,17 +291,20 @@ export class PanoramaViewer {
       if (e.pointerType === 'touch') return;
       dragging = true; moved = 0; downTime = Date.now();
       lastX = e.clientX; lastY = e.clientY;
+      this._startLongPress(e.clientX, e.clientY);
       try { el.setPointerCapture(e.pointerId); } catch (_) {}
     });
     el.addEventListener('pointermove', (e) => {
       if (!dragging || e.pointerType === 'touch') return;
       const dx = e.clientX - lastX, dy = e.clientY - lastY;
       lastX = e.clientX; lastY = e.clientY; moved += Math.abs(dx) + Math.abs(dy);
+      if (moved > 8) this._cancelLongPress();
       const s = sens(); this.yaw -= dx * s; this.pitch += dy * s; this._clampPitch();
     });
     el.addEventListener('pointerup', (e) => {
       if (e.pointerType === 'touch') return;
-      dragging = false;
+      dragging = false; this._cancelLongPress();
+      if (this._lpFired) { this._lpFired = false; return; }
       if (moved < 6 && Date.now() - downTime < 400) this._handleTap(e.clientX, e.clientY);
     });
     el.addEventListener('wheel', (e) => {
@@ -311,7 +317,8 @@ export class PanoramaViewer {
       if (e.touches.length === 1) {
         dragging = true; moved = 0; downTime = Date.now();
         lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
-      } else if (e.touches.length === 2) { dragging = false; pinchDist = this._tDist(e.touches); }
+        this._startLongPress(lastX, lastY);
+      } else if (e.touches.length === 2) { dragging = false; this._cancelLongPress(); pinchDist = this._tDist(e.touches); }
     }, { passive: false });
     el.addEventListener('touchmove', (e) => {
       e.preventDefault();
@@ -319,6 +326,7 @@ export class PanoramaViewer {
         const t = e.touches[0];
         const dx = t.clientX - lastX, dy = t.clientY - lastY;
         lastX = t.clientX; lastY = t.clientY; moved += Math.abs(dx) + Math.abs(dy);
+        if (moved > 8) this._cancelLongPress();
         const s = sens(); this.yaw -= dx * s; this.pitch += dy * s; this._clampPitch();
       } else if (e.touches.length === 2) {
         const d = this._tDist(e.touches);
@@ -330,12 +338,28 @@ export class PanoramaViewer {
       }
     }, { passive: false });
     el.addEventListener('touchend', (e) => {
+      this._cancelLongPress();
+      if (this._lpFired) { this._lpFired = false; dragging = false; if (e.touches.length < 2) pinchDist = 0; return; }
       if (dragging && moved < 10 && Date.now() - downTime < 400 && e.changedTouches.length) {
         this._handleTap(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
       }
       dragging = false; if (e.touches.length < 2) pinchDist = 0;
     });
   }
+
+  _startLongPress(x, y) {
+    this._cancelLongPress();
+    this._lpFired = false;
+    this._lpTimer = setTimeout(() => {
+      if (this.placeMode) return;
+      const objs = this.hotspots.map((h) => h.obj);
+      const d = this._tapDir(x, y);
+      this.raycaster.setFromCamera(d.ndc, this.camera);
+      const hits = this.raycaster.intersectObjects(objs, false);
+      if (hits.length && this.onHotspotMenu) { this._lpFired = true; this.onHotspotMenu(hits[0].object.userData); }
+    }, 500);
+  }
+  _cancelLongPress() { if (this._lpTimer) { clearTimeout(this._lpTimer); this._lpTimer = null; } }
 
   _tDist(t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
   _clampPitch() { const lim = Math.PI/2 - 0.05; this.pitch = Math.max(-lim, Math.min(lim, this.pitch)); }

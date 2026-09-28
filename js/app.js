@@ -6,6 +6,7 @@ import * as DB from './db.js';
 import { processPanorama, processImage } from './image.js';
 import { PanoramaViewer } from './viewer.js';
 import { FloorMap } from './map.js';
+import { exportTasksPDF } from './export.js';
 import * as UI from './ui.js';
 
 /* -------------------- object-URL cache -------------------- */
@@ -37,6 +38,7 @@ const state = {
   project: null,
   scenes: [],
   currentSceneId: null,
+  currentFloorId: null,
   selectedForMap: null,
   history: [],          // scene ids for the Back button
 };
@@ -86,6 +88,7 @@ function wireGlobal() {
   el('btnFullscreen').onclick = toggleFullscreen;
   el('btnNavBack').onclick = navBack;
   el('placeBanner').onclick = cancelPlace;
+  el('btnExportTasks').onclick = exportTasks;
 
   el('aimConfirm').onclick = () => finishAim(true);
   el('aimCancel').onclick = () => finishAim(false);
@@ -112,7 +115,13 @@ async function openProject(id) {
   if (!project) return;
   state.view = 'project'; state.project = project;
   state.scenes = await DB.listScenes(id);
+  // Migrate legacy single-floor projects to the floors[] model.
+  const mig = DB.ensureFloors(project, state.scenes);
+  if (mig.changed) { await DB.putProject(project); for (const s of state.scenes) await DB.putScene(s); }
+  state.currentFloorId = project.currentFloorId;
   state.currentSceneId = project.coverSceneId || (state.scenes[0] && state.scenes[0].id) || null;
+  const cur = state.scenes.find((s) => s.id === state.currentSceneId);
+  if (cur && cur.floorId) state.currentFloorId = cur.floorId;
   state.selectedForMap = state.currentSceneId;
   state.history = [];
 
@@ -124,6 +133,7 @@ async function openProject(id) {
   ensureViewer(); ensureMap();
   switchTab('tour');
   await refreshCurrentScene();
+  renderFloorBars();
   renderGrid();
 }
 
@@ -202,8 +212,8 @@ function switchTab(tab) {
   ['tour', 'map', 'grid'].forEach((n) => el('pane-' + n).classList.toggle('active', n === tab));
   if (tab === 'tour') { if (viewer) { viewer.start(); setTimeout(() => viewer._resize(), 30); } }
   else if (viewer) viewer.stop();
-  if (tab === 'map') refreshMap();
-  if (tab === 'grid') renderGrid();
+  if (tab === 'map') { renderFloorBars(); refreshMap(); }
+  if (tab === 'grid') { renderFloorBars(); renderGrid(); }
 }
 
 /* ============================================================
@@ -213,9 +223,103 @@ function ensureViewer() {
   if (viewer) return;
   viewer = new PanoramaViewer(el('viewer'));
   viewer.onHotspotActivate = onHotspotActivate;
+  viewer.onHotspotMenu = onHotspotMenu;
   viewer.onPlace = onPlace;
   viewer.onMeasureFirstPoint = () => UI.toast('Now tap the second point');
 }
+
+/* ============================================================
+   Floors
+   ============================================================ */
+function scenesOnFloor(floorId) {
+  return state.scenes.filter((s) => (s.floorId || (state.project.floors[0] && state.project.floors[0].id)) === floorId);
+}
+
+function renderFloorBars() {
+  ['floorBar', 'floorBarGrid'].forEach((id) => {
+    const bar = el(id);
+    if (!bar) return;
+    bar.innerHTML = '';
+    (state.project.floors || []).forEach((f) => {
+      const chip = document.createElement('div');
+      chip.className = 'floor-chip' + (f.id === state.currentFloorId ? ' active' : '');
+      const count = scenesOnFloor(f.id).length;
+      chip.innerHTML = `<span class="fc-name">${UI.escapeHtml(f.name)}${count ? ` · ${count}` : ''}</span>${f.id === state.currentFloorId ? '<span class="fc-menu">⋮</span>' : ''}`;
+      chip.querySelector('.fc-name').onclick = () => setFloor(f.id);
+      const menu = chip.querySelector('.fc-menu');
+      if (menu) menu.onclick = (e) => { e.stopPropagation(); floorMenu(f); };
+      bar.appendChild(chip);
+    });
+    const add = document.createElement('div');
+    add.className = 'floor-chip add';
+    add.textContent = '＋ Floor';
+    add.onclick = addFloor;
+    bar.appendChild(add);
+  });
+}
+
+async function setFloor(id) {
+  state.currentFloorId = id;
+  state.project.currentFloorId = id;
+  await DB.putProject(state.project);
+  // Keep the map selection on this floor.
+  const onFloor = scenesOnFloor(id);
+  if (!onFloor.some((s) => s.id === state.selectedForMap)) state.selectedForMap = onFloor[0] ? onFloor[0].id : null;
+  renderFloorBars();
+  renderGrid();
+  refreshMap();
+}
+
+async function addFloor() {
+  const name = await UI.promptText({ title: 'Add floor', label: 'Floor name', placeholder: 'e.g. Level 3 / Roof / Basement', ok: 'Add' });
+  if (name === null) return;
+  const floor = { id: DB.uid('f_'), name: name || `Level ${state.project.floors.length + 1}`, floorImageId: null };
+  state.project.floors.push(floor);
+  await DB.putProject(state.project);
+  await setFloor(floor.id);
+  UI.toast('Floor added — import shots to put them here');
+}
+
+async function floorMenu(floor) {
+  const { close, q } = UI.customModal(`
+    <h2>${UI.escapeHtml(floor.name)}</h2>
+    <div class="row spread">
+      <button class="btn small" data-a="rename">Rename</button>
+      <button class="btn small" data-a="image">${floor.floorImageId ? 'Change' : 'Set'} plan image</button>
+      <button class="btn small danger" data-a="del">Delete floor</button>
+    </div>
+    <div class="row"><button class="btn" data-a="close">Close</button></div>`);
+  q('[data-a=close]').onclick = close;
+  q('[data-a=rename]').onclick = async () => {
+    close();
+    const name = await UI.promptText({ title: 'Rename floor', value: floor.name, ok: 'Save' });
+    if (name) { floor.name = name; await DB.putProject(state.project); renderFloorBars(); }
+  };
+  q('[data-a=image]').onclick = () => { close(); el('fileFloor').click(); };
+  q('[data-a=del]').onclick = async () => {
+    close();
+    if (state.project.floors.length < 2) { UI.toast('Keep at least one floor'); return; }
+    const others = state.project.floors.filter((f) => f.id !== floor.id);
+    const moveTo = others[0];
+    const n = scenesOnFloor(floor.id).length;
+    const ok = await UI.confirmDialog({
+      title: 'Delete floor?',
+      message: n ? `${n} shot(s) will move to "${moveTo.name}".` : `Delete "${floor.name}"?`,
+      ok: 'Delete', danger: true,
+    });
+    if (!ok) return;
+    for (const s of scenesOnFloor(floor.id)) { s.floorId = moveTo.id; await DB.putScene(s); }
+    if (floor.floorImageId) { forgetUrl(floor.floorImageId); await DB.deleteBlob(floor.floorImageId); }
+    state.project.floors = others;
+    if (state.currentFloorId === floor.id) state.currentFloorId = moveTo.id;
+    state.project.currentFloorId = state.currentFloorId;
+    await DB.putProject(state.project);
+    renderFloorBars(); renderGrid(); refreshMap();
+    UI.toast('Floor deleted');
+  };
+}
+
+function currentFloor() { return (state.project.floors || []).find((f) => f.id === state.currentFloorId) || state.project.floors[0]; }
 function currentScene() { return state.scenes.find((s) => s.id === state.currentSceneId) || null; }
 
 async function refreshCurrentScene(view) {
@@ -239,6 +343,14 @@ async function goToScene(id, view, { record = true } = {}) {
   if (record && state.currentSceneId && state.currentSceneId !== id) state.history.push(state.currentSceneId);
   state.currentSceneId = id;
   state.selectedForMap = id;
+  // Follow the shot to its floor so the map/grid context stays in sync.
+  const sc = state.scenes.find((s) => s.id === id);
+  if (sc && sc.floorId && sc.floorId !== state.currentFloorId) {
+    state.currentFloorId = sc.floorId;
+    state.project.currentFloorId = sc.floorId;
+    await DB.putProject(state.project);
+    renderFloorBars();
+  }
   await refreshCurrentScene(view);
   if (state.tab !== 'tour') switchTab('tour');
   if (floorMap) floorMap.setSelected(id);
@@ -263,6 +375,34 @@ async function onHotspotActivate(data) {
   } else if (data.type === 'measure') {
     measureViewModal(data);
   }
+}
+
+/* Long-press on a hotspot — quick delete for arrows, edit menu for the rest. */
+async function onHotspotMenu(data) {
+  if (data.type === 'note') return noteViewModal(data);
+  if (data.type === 'measure') return measureViewModal(data);
+  // nav arrow
+  const scene = currentScene();
+  const target = state.scenes.find((s) => s.id === data.targetSceneId);
+  const tname = target ? (target.name || 'Untitled') : 'deleted shot';
+  const { close, q } = UI.customModal(`
+    <h2>Path arrow → ${UI.escapeHtml(tname)}</h2>
+    <p class="muted">Delete this arrow?</p>
+    <div class="row spread">
+      <button class="btn small" data-a="one">This direction</button>
+      <button class="btn small danger" data-a="both">Both directions</button>
+      <button class="btn" data-a="cancel">Cancel</button>
+    </div>`);
+  q('[data-a=cancel]').onclick = close;
+  q('[data-a=one]').onclick = async () => { close(); await removeHotspot(data.id); };
+  q('[data-a=both]').onclick = async () => {
+    close();
+    if (target) {
+      target.hotspots = (target.hotspots || []).filter((h) => !(h.type === 'nav' && h.targetSceneId === scene.id));
+      await DB.putScene(target);
+    }
+    await removeHotspot(data.id);
+  };
 }
 
 /* ============================================================
@@ -582,12 +722,14 @@ function toggleFullscreen() {
    ============================================================ */
 async function renderGrid() {
   const grid = el('shotGrid');
-  if (!state.scenes.length) {
-    grid.innerHTML = `<div class="empty-note" style="grid-column:1/-1">No shots yet.<br/>Tap <strong>+</strong> to import 360° photos.</div>`;
+  const floorScenes = state.currentFloorId ? scenesOnFloor(state.currentFloorId) : state.scenes;
+  if (!floorScenes.length) {
+    const fname = currentFloor() ? currentFloor().name : '';
+    grid.innerHTML = `<div class="empty-note" style="grid-column:1/-1">No shots on <strong>${UI.escapeHtml(fname)}</strong> yet.<br/>Tap <strong>+</strong> to import 360° photos onto this floor.</div>`;
     return;
   }
   grid.innerHTML = '';
-  for (const s of state.scenes) {
+  for (const s of floorScenes) {
     const thumb = await blobUrl(s.thumbId);
     const nav = (s.hotspots || []).filter((h) => h.type === 'nav').length;
     const notes = (s.hotspots || []).filter((h) => h.type === 'note').length;
@@ -673,6 +815,7 @@ async function handleSceneFiles(fileList) {
         id: DB.uid('s_'), projectId: state.project.id,
         name: file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Shot',
         order: state.scenes.length, imageId, thumbId,
+        floorId: state.currentFloorId,
         initYaw: 0, initPitch: 0, map: null, hotspots: [],
       };
       await DB.putScene(scene);
@@ -712,14 +855,15 @@ async function handleReplaceFile(file) {
 async function handleFloorFile(file) {
   el('fileFloor').value = '';
   if (!file || !state.project) return;
+  const floor = currentFloor();
+  if (!floor) return;
   try {
-    const { blob } = await processImage(file, 2048);
-    if (state.project.floorImageId) { forgetUrl(state.project.floorImageId); await DB.deleteBlob(state.project.floorImageId); }
-    const id = await DB.putBlob(DB.uid('b_'), blob);
-    state.project.floorImageId = id;
+    const { blob } = await processImage(file, 3000);
+    if (floor.floorImageId) { forgetUrl(floor.floorImageId); await DB.deleteBlob(floor.floorImageId); }
+    floor.floorImageId = await DB.putBlob(DB.uid('b_'), blob);
     await DB.putProject(state.project);
     refreshMap();
-    UI.toast('Floor plan set');
+    UI.toast(`Floor plan set for ${floor.name}`);
   } catch (e) { UI.toast('Couldn\'t load that image'); }
 }
 
@@ -733,17 +877,18 @@ function ensureMap() {
   floorMap.onMoveScene = async (id, pos) => { const s = state.scenes.find((x) => x.id === id); if (s) { s.map = pos; await DB.putScene(s); } };
   floorMap.onPlaceScene = async (id, pos) => {
     const s = state.scenes.find((x) => x.id === id);
-    if (s) { s.map = pos; await DB.putScene(s); floorMap.setData(state.scenes, floorMap.floorImage, state.selectedForMap); UI.toast('Placed'); }
+    if (s) { s.map = pos; await DB.putScene(s); floorMap.setData(scenesOnFloor(state.currentFloorId), floorMap.floorImage, state.selectedForMap); UI.toast('Placed'); }
   };
 }
 async function refreshMap() {
   if (!floorMap) return;
+  const floor = currentFloor();
   let img = null;
-  if (state.project.floorImageId) {
-    const url = await blobUrl(state.project.floorImageId);
+  if (floor && floor.floorImageId) {
+    const url = await blobUrl(floor.floorImageId);
     if (url) img = await new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = url; });
   }
-  floorMap.setData(state.scenes, img, state.selectedForMap);
+  floorMap.setData(scenesOnFloor(state.currentFloorId), img, state.selectedForMap);
 }
 
 /* ============================================================
@@ -759,6 +904,37 @@ async function exportProject(id) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
+async function exportTasks() {
+  if (!state.project) return;
+  const totalAll = state.scenes.reduce((n, s) => n + (s.hotspots || []).filter((h) => h.type === 'note').length, 0);
+  if (!totalAll) { UI.toast('No pinned tasks yet — add notes with 📌'); return; }
+  const onFloor = scenesOnFloor(state.currentFloorId).reduce((n, s) => n + (s.hotspots || []).filter((h) => h.type === 'note').length, 0);
+  const fname = currentFloor() ? currentFloor().name : 'this floor';
+  const { close, q } = UI.customModal(`
+    <h2>Export tasks to PDF</h2>
+    <p class="muted">Each pinned task becomes a page with its photo, priority and location.</p>
+    <div class="row spread">
+      <button class="btn small" data-a="floor">${UI.escapeHtml(fname)} (${onFloor})</button>
+      <button class="btn primary small" data-a="all">All floors (${totalAll})</button>
+      <button class="btn" data-a="cancel">Cancel</button>
+    </div>`);
+  q('[data-a=cancel]').onclick = close;
+  const run = async (floorId) => {
+    close();
+    UI.toast('Building PDF…', 60000);
+    try {
+      const n = await exportTasksPDF({
+        project: state.project, scenes: state.scenes, floors: state.project.floors,
+        getBlob: DB.getBlob, floorId,
+        onProgress: (i, t) => UI.toast(`Rendering task ${i} of ${t}…`, 60000),
+      });
+      UI.toast(n ? `PDF ready — ${n} task(s)` : 'No tasks to export');
+    } catch (e) { console.error(e); UI.toast('PDF export failed'); }
+  };
+  q('[data-a=floor]').onclick = () => run(state.currentFloorId);
+  q('[data-a=all]').onclick = () => run(null);
+}
+
 async function handleImportFile(file) {
   el('fileImport').value = '';
   if (!file) return;

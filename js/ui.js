@@ -100,9 +100,12 @@ export function showHelp() {
       <p><strong>4. Connect the walk (two-way).</strong> In a shot, tap <code>➤</code>, tap the floor toward a doorway, pick the shot through it, then turn to the view you'll see when you arrive and hit <em>✓ Set view</em>. SiteWalk creates the arrow <em>and</em> a matching arrow back. Tap a floor arrow to walk; tap <code>↩</code> (top-left) to step back.</p>
       <p><strong>5. Notes with priority.</strong> Tap <code>📌</code>, place it, type the note and pick <span style="color:#ef4444">High</span> / <span style="color:#f59e0b">Medium</span> / <span style="color:#22c55e">Low</span> — the pin takes that color.</p>
       <p><strong>6. Measurements.</strong> Tap <code>📏</code>, tap the two ends of what you measured, and log the number + label. It's stored on the shot with a labeled line.</p>
-      <p><strong>7. Manage a stop.</strong> Tap <code>☰</code> to edit/delete any arrow, note or measurement, or to re-set an arrow's arrival view.</p>
-      <p><strong>8. Revise a photo.</strong> <em>Shots</em> → ⋮ on a shot → <em>Replace photo</em> keeps all its arrows, notes and floor-plan spot.</p>
-      <p><strong>9. Floor plan.</strong> On <em>Floor plan</em>, optionally set a plan image, then place each shot as a dot; tap a dot to jump there.</p>
+      <p><strong>7. Delete an arrow.</strong> Long-press a floor arrow to delete it (this direction, or both directions). You can also manage everything from <code>☰</code>.</p>
+      <p><strong>8. Manage a stop.</strong> Tap <code>☰</code> to edit/delete any arrow, note or measurement, or to re-set an arrow's arrival view.</p>
+      <p><strong>9. Revise a photo.</strong> <em>Shots</em> → ⋮ on a shot → <em>Replace photo</em> keeps all its arrows, notes and floor-plan spot.</p>
+      <p><strong>10. Floors.</strong> Use the floor tabs (bookmarks) on <em>Shots</em> and <em>Floor plan</em> to keep each level separate. Tap <em>＋ Floor</em> to add one, then import shots — they land on the floor you're viewing, so levels never get mixed up. Give each floor its own plan image.</p>
+      <p><strong>11. Floor plan.</strong> On <em>Floor plan</em>, set that floor's plan image, then place each shot as a dot; tap a dot to jump there.</p>
+      <p><strong>12. Punch list PDF.</strong> On <em>Shots</em>, tap <em>Tasks → PDF</em> to export every pinned note as a PDF — each task with a photo of the exact spot, its priority and location.</p>
       <p class="muted tiny">Everything is stored on your phone and works offline. Use ⋮ on a tour to export one file you can back up or send.</p>
       <p class="muted tiny">Note: measurements are the values you record with your own tape/laser (a single 360 photo has no depth to auto-measure). SiteWalk can't control the Insta360 directly, and it doesn't build a 3D dollhouse mesh — it builds a fast, connected 360° walkthrough.</p>
     </div>

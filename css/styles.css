@@ -227,6 +227,27 @@ html, body {
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .section-label { font-size: 12px; color: var(--muted); margin: 12px 0 4px; text-transform: uppercase; letter-spacing: 0.5px; }
 
+/* ---------- Floor bookmarks ---------- */
+.floor-bar {
+  display: flex; gap: 8px; align-items: center;
+  padding: 10px 12px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  background: var(--bg-2); border-bottom: 1px solid var(--line);
+  flex: 1; min-width: 0;
+}
+.floor-bar::-webkit-scrollbar { display: none; }
+.floor-chip {
+  flex: none; display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; border-radius: 20px; cursor: pointer; font-size: 14px; font-weight: 600;
+  background: var(--bg-3); border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
+}
+.floor-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.floor-chip .fc-menu { font-size: 15px; opacity: 0.85; padding: 0 2px; }
+.floor-chip.add { color: var(--text); font-weight: 700; }
+
+.grid-toolbar { display: flex; align-items: stretch; gap: 8px; background: var(--bg-2); border-bottom: 1px solid var(--line); }
+.grid-toolbar .floor-bar { border-bottom: none; }
+.grid-toolbar #btnExportTasks { align-self: center; margin: 0 12px; flex: none; }
+
 /* ---------- Map / floor plan ---------- */
 .map-toolbar { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--bg-2); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .map-wrap { flex: 1; position: relative; background: var(--bg); min-height: 0; overflow: hidden; }
