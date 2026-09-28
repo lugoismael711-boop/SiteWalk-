@@ -15,11 +15,24 @@ your phone.
   app to your camera roll, then pick them here (multiple at once).
 - **True 360° viewing** — drag, pinch-to-zoom, or use your phone's motion sensor
   (gyro) to look around each spot.
-- **Walk the space** — drop navigation arrows (➤) aimed at doorways/openings to
-  link one shot to the next, just like clicking through a Matterport tour.
+- **Walk the space, both ways** — drop a **path arrow** (➤) on the floor toward a
+  doorway and pick the shot through it. SiteWalk creates the forward arrow **and
+  a matching arrow back**, so you're never stuck. A **Back** button (↩) also
+  steps through your history at any time.
+- **Choose the arrival view** — when you link two shots you set the exact
+  direction you'll be facing when you arrive (and when you come back), so the
+  walk flows naturally.
+- **Priority notes** — pin note tags (📌) and flag them **High / Medium / Low**;
+  the pin is colored red / amber / green to match.
+- **Measurements** — mark two points with the measure tool (📏) and log the
+  distance you measured (with your tape/laser) plus a label. Stored on the shot
+  as a labeled line.
+- **Manage any stop** — the ☰ panel lists every arrow, note and measurement on a
+  shot so you can edit, delete, or re-set an arrow's arrival view.
+- **Revise a photo** — replace a shot's image while keeping all its arrows,
+  notes and floor-plan position.
 - **Floor plan** — optionally set a floor-plan image, then place each shot as a
   numbered dot. Tap a dot to jump there; links between shots are drawn for you.
-- **Notes** — pin note tags (📌) on defects, equipment, or anything worth flagging.
 - **Backup & share** — export a whole tour as a single `.sitewalk` file and
   import it on another device.
 
@@ -28,11 +41,21 @@ your phone.
 1. **Shoot** each spot with the Insta360 app (one capture every few metres).
 2. **Export** each as a flat **equirectangular** photo to your phone's photos.
 3. Open SiteWalk → **New tour** → **Shots** tab → **+** → pick your photos.
-4. Open a shot, aim at a doorway, tap **➤**, and choose the shot through it.
-5. On the **Floor plan** tab, place each shot as a dot.
-6. Tap **📌** to add notes wherever you need them.
+4. Open a shot, tap **➤**, tap the floor toward a doorway, pick the shot through
+   it, then turn to the arrival view and tap **✓ Set view**. Repeat to build the
+   walk. Tap a floor arrow to move; tap **↩** to go back.
+5. Tap **📌** for a priority note, or **📏** to record a measurement.
+6. Tap **☰** to review/edit everything on the current stop.
+7. On the **Floor plan** tab, place each shot as a dot.
 
 Tap **?** in the app anytime for these steps.
+
+### A note on measurements
+
+A single 360° photo has no depth data, so distances can't be computed
+automatically. The measure tool stores the value **you** record with a tape or
+laser, tied to the two points you tap and to that shot — a reliable field log,
+not a guess.
 
 ## Running it
 

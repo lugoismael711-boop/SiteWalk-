@@ -65,15 +65,27 @@
             </div>
           </div>
           <div id="viewerHud" class="viewer-hud" hidden>
-            <div id="sceneName" class="scene-name"></div>
+            <div class="scene-top">
+              <button id="btnNavBack" class="hud-btn small-hud" title="Go back" hidden>↩</button>
+              <div id="sceneName" class="scene-name"></div>
+            </div>
             <div class="hud-controls">
-              <button id="btnGyro" class="hud-btn" title="Look with your phone">🧭</button>
-              <button id="btnAddHotspot" class="hud-btn" title="Add navigation arrow">➤</button>
+              <button id="btnManage" class="hud-btn" title="Manage this stop's arrows, notes & measurements">☰</button>
+              <button id="btnAddMeasure" class="hud-btn" title="Measure &amp; store a distance">📏</button>
               <button id="btnAddNote" class="hud-btn" title="Add a note tag">📌</button>
+              <button id="btnAddHotspot" class="hud-btn" title="Add a path arrow to another shot">➤</button>
+              <button id="btnGyro" class="hud-btn" title="Look with your phone">🧭</button>
               <button id="btnFullscreen" class="hud-btn" title="Fullscreen">⤢</button>
             </div>
           </div>
           <div id="placeBanner" class="place-banner" hidden></div>
+          <div id="aimBar" class="aim-bar" hidden>
+            <span id="aimText">Turn to the view you want, then confirm</span>
+            <div class="aim-actions">
+              <button id="aimCancel" class="btn small">Cancel</button>
+              <button id="aimConfirm" class="btn primary small">✓ Set view</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -101,6 +113,7 @@
 
   <!-- Hidden file inputs -->
   <input id="fileScene" type="file" accept="image/*" multiple hidden />
+  <input id="fileReplace" type="file" accept="image/*" hidden />
   <input id="fileFloor" type="file" accept="image/*" hidden />
   <input id="fileImport" type="file" accept="application/json,.sitewalk,.json" hidden />
 

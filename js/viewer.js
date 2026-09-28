@@ -4,18 +4,31 @@
    • Renders a 360° photo on the inside of a sphere
    • Drag / pinch / wheel to look around and zoom
    • Optional device-orientation ("gyro") look control
-   • Navigation + note hotspots as billboarded sprites
-   • Tap-to-place mode returns yaw/pitch for new hotspots
+   • Hotspots:
+       - nav     : a flat arrow/chevron on the FLOOR (a path marker)
+       - note    : a colored pin (color = priority)
+       - measure : a line between two points with a distance label
+   • Place modes return positions to the app:
+       - 'nav' / 'note'  -> one tap  -> onPlace(mode,{yaw,pitch})
+       - 'measure'       -> two taps -> onPlace('measure',{a,b})
+   • Aim mode: no placing; app reads getLook() to store a landing view
    ============================================================ */
 
 import * as THREE from 'three';
 
 const SPHERE_R = 500;
 const HOTSPOT_R = 460;
+const FLOOR_R = 430;
 const MIN_FOV = 30;
 const MAX_FOV = 90;
+const FLOOR_PITCH = -0.62; // arrows sit on the floor (~ -35°) unless tapped lower
 
-// Convert yaw (rad, around Y) + pitch (rad) to a direction vector.
+export const PRIORITY_COLORS = {
+  high:   '#ef4444',
+  medium: '#f59e0b',
+  low:    '#22c55e',
+};
+
 function dirFromYawPitch(yaw, pitch) {
   return new THREE.Vector3(
     Math.cos(pitch) * Math.sin(yaw),
@@ -34,14 +47,10 @@ export class PanoramaViewer {
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.1, 1100);
     this.camera.position.set(0, 0, 0);
 
-    // Look state (spherical, radians)
-    this.yaw = 0;
-    this.pitch = 0;
-    this.fov = 70;
+    this.yaw = 0; this.pitch = 0; this.fov = 70;
 
-    // Sphere
     const geo = new THREE.SphereGeometry(SPHERE_R, 64, 40);
-    geo.scale(-1, 1, 1); // render inside faces
+    geo.scale(-1, 1, 1);
     this.sphereMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
     this.sphere = new THREE.Mesh(geo, this.sphereMat);
     this.scene.add(this.sphere);
@@ -49,22 +58,23 @@ export class PanoramaViewer {
     this.currentTexture = null;
     this.hotspotGroup = new THREE.Group();
     this.scene.add(this.hotspotGroup);
-    this.hotspots = []; // { mesh, data }
+    this.hotspots = [];       // { obj, data } — objects that respond to taps
+    this._decor = [];         // non-interactive lines/dots to dispose
 
     this.raycaster = new THREE.Raycaster();
-    this.placeMode = null; // 'nav' | 'note' | null
+    this.raycaster.params.Line = { threshold: 6 };
+    this.placeMode = null;    // 'nav' | 'note' | 'measure' | null
+    this._measureFirst = null;
 
-    // Callbacks (set by app)
-    this.onHotspotActivate = null; // (data) => {}
-    this.onPlace = null;           // (yaw, pitch) => {}
+    this.onHotspotActivate = null;
+    this.onPlace = null;
+    this.onMeasureFirstPoint = null;
 
     this._gyroEnabled = false;
     this._gyroQuat = new THREE.Quaternion();
-    this._screenOrient = 0;
 
     this._bindInput();
     this._resize();
-    this._raf = null;
     this._running = false;
     window.addEventListener('resize', () => this._resize());
   }
@@ -81,10 +91,7 @@ export class PanoramaViewer {
     };
     loop();
   }
-  stop() {
-    this._running = false;
-    if (this._raf) cancelAnimationFrame(this._raf);
-  }
+  stop() { this._running = false; if (this._raf) cancelAnimationFrame(this._raf); }
 
   _resize() {
     const w = this.canvas.clientWidth || this.canvas.parentElement.clientWidth;
@@ -114,96 +121,180 @@ export class PanoramaViewer {
     if (this.sphereMat) this.sphereMat.dispose();
     this.sphereMat = this.sphere.material;
 
-    this.yaw = initYaw;
-    this.pitch = initPitch;
+    this.yaw = initYaw; this.pitch = initPitch;
     this._resize();
   }
 
+  setView(yaw, pitch) { this.yaw = yaw; this.pitch = pitch; }
+
   /* -------------------- hotspots -------------------- */
-  setHotspots(list) {
-    // Clear
-    this.hotspots.forEach((h) => {
-      this.hotspotGroup.remove(h.mesh);
-      if (h.mesh.material.map) h.mesh.material.map.dispose();
-      h.mesh.material.dispose();
-    });
+  clearHotspots() {
+    this.hotspots.forEach((h) => this._disposeObj(h.obj));
     this.hotspots = [];
-    (list || []).forEach((data) => this._addHotspotMesh(data));
+    this._decor.forEach((o) => this._disposeObj(o));
+    this._decor = [];
+    this._clearMeasureTemp();
+  }
+  _disposeObj(obj) {
+    this.hotspotGroup.remove(obj);
+    if (obj.material) {
+      if (obj.material.map) obj.material.map.dispose();
+      obj.material.dispose();
+    }
+    if (obj.geometry) obj.geometry.dispose();
   }
 
-  _addHotspotMesh(data) {
-    const tex = this._makeHotspotTexture(data.type);
+  setHotspots(list) {
+    this.clearHotspots();
+    (list || []).forEach((data) => {
+      if (data.type === 'nav') this._addNav(data);
+      else if (data.type === 'note') this._addNote(data);
+      else if (data.type === 'measure') this._addMeasure(data);
+    });
+  }
+
+  /* nav = flat chevron on the floor pointing along the walk direction */
+  _addNav(data) {
+    const tex = this._navTexture();
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+    const size = 96;
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
+    // Keep the marker where the user tapped; the flat orientation makes it
+    // read as a path on the ground. (Tap the floor for the best look.)
+    const pitch = data.pitch;
+    plane.position.copy(dirFromYawPitch(data.yaw, pitch).multiplyScalar(FLOOR_R));
+    // lie flat on the ground and rotate the chevron to face outward along yaw
+    plane.rotation.order = 'YXZ';
+    plane.rotation.y = data.yaw;
+    plane.rotation.x = -Math.PI / 2;
+    plane.userData = data;
+    this.hotspotGroup.add(plane);
+    this.hotspots.push({ obj: plane, data });
+  }
+
+  _navTexture() {
+    const s = 256;
+    const c = document.createElement('canvas'); c.width = c.height = s;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, s, s);
+    // soft ring
+    ctx.beginPath(); ctx.arc(s/2, s/2, s*0.42, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(59,130,246,0.35)'; ctx.fill();
+    ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
+    // double chevron pointing "up" in texture (=> outward along yaw)
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 22; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (let i = 0; i < 2; i++) {
+      const off = i * 46;
+      ctx.beginPath();
+      ctx.moveTo(s*0.30, s*0.60 - off);
+      ctx.lineTo(s*0.50, s*0.40 - off);
+      ctx.lineTo(s*0.70, s*0.60 - off);
+      ctx.stroke();
+    }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+
+  /* note = billboarded colored pin */
+  _addNote(data) {
+    const color = PRIORITY_COLORS[data.priority] || PRIORITY_COLORS.low;
+    const tex = this._pinTexture(color);
     const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false, transparent: true });
     const sprite = new THREE.Sprite(mat);
-    const scale = data.type === 'note' ? 34 : 46;
-    sprite.scale.set(scale, scale, 1);
-    const dir = dirFromYawPitch(data.yaw, data.pitch).multiplyScalar(HOTSPOT_R);
-    sprite.position.copy(dir);
+    sprite.scale.set(38, 38, 1);
+    sprite.position.copy(dirFromYawPitch(data.yaw, data.pitch).multiplyScalar(HOTSPOT_R));
     sprite.userData = data;
     this.hotspotGroup.add(sprite);
-    this.hotspots.push({ mesh: sprite, data });
+    this.hotspots.push({ obj: sprite, data });
   }
 
-  _makeHotspotTexture(type) {
-    const size = 128;
-    const c = document.createElement('canvas');
-    c.width = c.height = size;
+  _pinTexture(color) {
+    const s = 128;
+    const c = document.createElement('canvas'); c.width = c.height = s;
     const ctx = c.getContext('2d');
-    ctx.clearRect(0, 0, size, size);
-    // soft disc
-    ctx.beginPath();
-    ctx.arc(size / 2, size / 2, size / 2 - 8, 0, Math.PI * 2);
-    ctx.fillStyle = type === 'note' ? 'rgba(34,197,94,0.92)' : 'rgba(59,130,246,0.92)';
-    ctx.fill();
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = 'rgba(255,255,255,0.95)';
-    ctx.stroke();
-    // glyph
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    if (type === 'note') {
-      ctx.font = 'bold 60px sans-serif';
-      ctx.fillText('i', size / 2, size / 2 + 2);
-    } else {
-      // up arrow (navigate)
-      ctx.font = 'bold 66px sans-serif';
-      ctx.fillText('↑', size / 2, size / 2 + 4);
-    }
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
+    ctx.beginPath(); ctx.arc(s/2, s/2, s/2 - 8, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+    ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 66px sans-serif';
+    ctx.fillText('!', s/2, s/2 + 4);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+
+  /* measure = endpoints + line + label at midpoint */
+  _addMeasure(data) {
+    const pa = dirFromYawPitch(data.a.yaw, data.a.pitch).multiplyScalar(HOTSPOT_R);
+    const pb = dirFromYawPitch(data.b.yaw, data.b.pitch).multiplyScalar(HOTSPOT_R);
+    const lineGeo = new THREE.BufferGeometry().setFromPoints([pa, pb]);
+    const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0x67e8f9, depthTest: false, transparent: true }));
+    line.renderOrder = 2;
+    this.hotspotGroup.add(line); this._decor.push(line);
+    // endpoints
+    [pa, pb].forEach((p) => {
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(4, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0x67e8f9, depthTest: false }));
+      dot.position.copy(p); this.hotspotGroup.add(dot); this._decor.push(dot);
+    });
+    // label
+    const mid = pa.clone().add(pb).multiplyScalar(0.5).setLength(HOTSPOT_R - 6);
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: this._labelTexture(data.label ? `${data.value} · ${data.label}` : String(data.value)),
+      depthTest: false, depthWrite: false, transparent: true,
+    }));
+    const w = 90;
+    label.scale.set(w, w * 0.34, 1);
+    label.position.copy(mid);
+    label.userData = data;
+    this.hotspotGroup.add(label);
+    this.hotspots.push({ obj: label, data });
+  }
+
+  _labelTexture(text) {
+    const pad = 24, h = 96;
+    const measure = document.createElement('canvas').getContext('2d');
+    measure.font = 'bold 46px sans-serif';
+    const w = Math.max(160, measure.measureText(text).width + pad * 2);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = 'rgba(8,12,18,0.85)';
+    roundRect(ctx, 2, 2, w - 4, h - 4, 20); ctx.fill();
+    ctx.strokeStyle = '#67e8f9'; ctx.lineWidth = 4; roundRect(ctx, 2, 2, w - 4, h - 4, 20); ctx.stroke();
+    ctx.fillStyle = '#e6faff'; ctx.font = 'bold 46px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, w / 2, h / 2 + 2);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    t._w = w; t._h = h;
+    return t;
   }
 
   /* -------------------- place mode -------------------- */
-  setPlaceMode(mode) { this.placeMode = mode; }
+  setPlaceMode(mode) {
+    this.placeMode = mode;
+    this._measureFirst = null;
+    this._clearMeasureTemp();
+  }
+  _clearMeasureTemp() {
+    if (this._measureTemp) { this._disposeObj(this._measureTemp); this._measureTemp = null; }
+  }
 
   /* -------------------- input -------------------- */
   _bindInput() {
     const el = this.canvas;
-    let dragging = false;
-    let lastX = 0, lastY = 0;
-    let moved = 0;
-    let pinchDist = 0;
-    let downTime = 0;
-
-    const getYawPitchSensitivity = () => (this.fov / 70) * 0.0025;
+    let dragging = false, lastX = 0, lastY = 0, moved = 0, pinchDist = 0, downTime = 0;
+    const sens = () => (this.fov / 70) * 0.0025;
 
     el.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'touch') return; // handled by touch events
+      if (e.pointerType === 'touch') return;
       dragging = true; moved = 0; downTime = Date.now();
       lastX = e.clientX; lastY = e.clientY;
-      el.setPointerCapture(e.pointerId);
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
     });
     el.addEventListener('pointermove', (e) => {
       if (!dragging || e.pointerType === 'touch') return;
       const dx = e.clientX - lastX, dy = e.clientY - lastY;
-      lastX = e.clientX; lastY = e.clientY;
-      moved += Math.abs(dx) + Math.abs(dy);
-      const s = getYawPitchSensitivity();
-      this.yaw -= dx * s;
-      this.pitch += dy * s;
-      this._clampPitch();
+      lastX = e.clientX; lastY = e.clientY; moved += Math.abs(dx) + Math.abs(dy);
+      const s = sens(); this.yaw -= dx * s; this.pitch += dy * s; this._clampPitch();
     });
     el.addEventListener('pointerup', (e) => {
       if (e.pointerType === 'touch') return;
@@ -213,38 +304,27 @@ export class PanoramaViewer {
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
       this.fov = Math.min(MAX_FOV, Math.max(MIN_FOV, this.fov + Math.sign(e.deltaY) * 3));
-      this.camera.fov = this.fov;
-      this.camera.updateProjectionMatrix();
+      this.camera.fov = this.fov; this.camera.updateProjectionMatrix();
     }, { passive: false });
 
-    // ----- Touch -----
     el.addEventListener('touchstart', (e) => {
       if (e.touches.length === 1) {
         dragging = true; moved = 0; downTime = Date.now();
         lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
-      } else if (e.touches.length === 2) {
-        dragging = false;
-        pinchDist = this._touchDist(e.touches);
-      }
+      } else if (e.touches.length === 2) { dragging = false; pinchDist = this._tDist(e.touches); }
     }, { passive: false });
     el.addEventListener('touchmove', (e) => {
       e.preventDefault();
       if (e.touches.length === 1 && dragging) {
         const t = e.touches[0];
         const dx = t.clientX - lastX, dy = t.clientY - lastY;
-        lastX = t.clientX; lastY = t.clientY;
-        moved += Math.abs(dx) + Math.abs(dy);
-        const s = getYawPitchSensitivity();
-        this.yaw -= dx * s;
-        this.pitch += dy * s;
-        this._clampPitch();
+        lastX = t.clientX; lastY = t.clientY; moved += Math.abs(dx) + Math.abs(dy);
+        const s = sens(); this.yaw -= dx * s; this.pitch += dy * s; this._clampPitch();
       } else if (e.touches.length === 2) {
-        const d = this._touchDist(e.touches);
+        const d = this._tDist(e.touches);
         if (pinchDist) {
-          const delta = (pinchDist - d) * 0.12;
-          this.fov = Math.min(MAX_FOV, Math.max(MIN_FOV, this.fov + delta));
-          this.camera.fov = this.fov;
-          this.camera.updateProjectionMatrix();
+          this.fov = Math.min(MAX_FOV, Math.max(MIN_FOV, this.fov + (pinchDist - d) * 0.12));
+          this.camera.fov = this.fov; this.camera.updateProjectionMatrix();
         }
         pinchDist = d;
       }
@@ -253,50 +333,64 @@ export class PanoramaViewer {
       if (dragging && moved < 10 && Date.now() - downTime < 400 && e.changedTouches.length) {
         this._handleTap(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
       }
-      dragging = false;
-      if (e.touches.length < 2) pinchDist = 0;
+      dragging = false; if (e.touches.length < 2) pinchDist = 0;
     });
   }
 
-  _touchDist(touches) {
-    const dx = touches[0].clientX - touches[1].clientX;
-    const dy = touches[0].clientY - touches[1].clientY;
-    return Math.hypot(dx, dy);
-  }
+  _tDist(t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
+  _clampPitch() { const lim = Math.PI/2 - 0.05; this.pitch = Math.max(-lim, Math.min(lim, this.pitch)); }
 
-  _clampPitch() {
-    const lim = Math.PI / 2 - 0.05;
-    this.pitch = Math.max(-lim, Math.min(lim, this.pitch));
-  }
-
-  _handleTap(clientX, clientY) {
+  _tapDir(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
       -((clientY - rect.top) / rect.height) * 2 + 1
     );
     this.raycaster.setFromCamera(ndc, this.camera);
+    const dir = this.raycaster.ray.direction.clone().normalize();
+    return {
+      yaw: Math.atan2(dir.x, dir.z),
+      pitch: Math.asin(Math.max(-1, Math.min(1, dir.y))),
+      ndc,
+    };
+  }
 
-    // Place mode wins if active.
-    if (this.placeMode) {
-      const dir = this.raycaster.ray.direction.clone().normalize();
-      const yaw = Math.atan2(dir.x, dir.z);
-      const pitch = Math.asin(Math.max(-1, Math.min(1, dir.y)));
-      if (this.onPlace) this.onPlace(yaw, pitch);
+  _handleTap(clientX, clientY) {
+    const d = this._tapDir(clientX, clientY);
+
+    if (this.placeMode === 'measure') {
+      if (!this._measureFirst) {
+        this._measureFirst = { yaw: d.yaw, pitch: d.pitch };
+        this._showMeasureTemp(this._measureFirst);
+        if (this.onMeasureFirstPoint) this.onMeasureFirstPoint(this._measureFirst);
+      } else {
+        const a = this._measureFirst, b = { yaw: d.yaw, pitch: d.pitch };
+        this._measureFirst = null; this._clearMeasureTemp();
+        if (this.onPlace) this.onPlace('measure', { a, b });
+      }
       return;
     }
-
-    // Otherwise test hotspots.
-    const meshes = this.hotspots.map((h) => h.mesh);
-    const hits = this.raycaster.intersectObjects(meshes, false);
-    if (hits.length && this.onHotspotActivate) {
-      this.onHotspotActivate(hits[0].object.userData);
+    if (this.placeMode === 'nav' || this.placeMode === 'note') {
+      if (this.onPlace) this.onPlace(this.placeMode, { yaw: d.yaw, pitch: d.pitch });
+      return;
     }
+    // not placing: hit-test hotspots
+    const objs = this.hotspots.map((h) => h.obj);
+    const hits = this.raycaster.intersectObjects(objs, false);
+    if (hits.length && this.onHotspotActivate) this.onHotspotActivate(hits[0].object.userData);
+  }
+
+  _showMeasureTemp(pt) {
+    this._clearMeasureTemp();
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(5, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0x67e8f9, depthTest: false }));
+    dot.position.copy(dirFromYawPitch(pt.yaw, pt.pitch).multiplyScalar(HOTSPOT_R));
+    this.hotspotGroup.add(dot);
+    this._measureTemp = dot;
   }
 
   /* -------------------- gyro -------------------- */
   async enableGyro() {
-    // iOS 13+ requires an explicit permission prompt from a user gesture.
     try {
       if (typeof DeviceOrientationEvent !== 'undefined' &&
           typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -304,10 +398,8 @@ export class PanoramaViewer {
         if (res !== 'granted') return false;
       }
     } catch (_) { return false; }
-
     this._onOrient = (e) => this._handleOrient(e);
     window.addEventListener('deviceorientation', this._onOrient, true);
-    this._screenOrient = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
     this._gyroEnabled = true;
     return true;
   }
@@ -319,44 +411,39 @@ export class PanoramaViewer {
 
   _handleOrient(e) {
     if (e.alpha == null) return;
-    const deg2rad = Math.PI / 180;
-    const alpha = e.alpha * deg2rad;
-    const beta = e.beta * deg2rad;
-    const gamma = e.gamma * deg2rad;
-    const orient = ((screen.orientation && screen.orientation.angle) || 0) * deg2rad;
-    this._quatFromEuler(this._gyroQuat, alpha, beta, gamma, orient);
-  }
-
-  _quatFromEuler(quat, alpha, beta, gamma, orient) {
-    // Standard deviceorientation -> quaternion (Three.js DeviceOrientationControls math)
+    const d = Math.PI / 180;
+    const alpha = e.alpha * d, beta = e.beta * d, gamma = e.gamma * d;
+    const orient = ((screen.orientation && screen.orientation.angle) || 0) * d;
     const zee = new THREE.Vector3(0, 0, 1);
     const euler = new THREE.Euler();
     const q0 = new THREE.Quaternion();
-    const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -PI/2 around x
+    const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
     euler.set(beta, alpha, -gamma, 'YXZ');
-    quat.setFromEuler(euler);
-    quat.multiply(q1);
-    quat.multiply(q0.setFromAxisAngle(zee, -orient));
+    this._gyroQuat.setFromEuler(euler);
+    this._gyroQuat.multiply(q1);
+    this._gyroQuat.multiply(q0.setFromAxisAngle(zee, -orient));
   }
 
-  /* -------------------- per-frame update -------------------- */
   _update() {
-    if (this._gyroEnabled) {
-      this.camera.quaternion.copy(this._gyroQuat);
-    } else {
-      const dir = dirFromYawPitch(this.yaw, this.pitch);
-      this.camera.lookAt(dir);
-    }
-    // Keep hotspot sprites a constant on-screen size regardless of fov handled by sprite scale.
+    if (this._gyroEnabled) this.camera.quaternion.copy(this._gyroQuat);
+    else this.camera.lookAt(dirFromYawPitch(this.yaw, this.pitch));
   }
 
-  /* Return the current look direction as yaw/pitch (for saving initial view). */
   getLook() { return { yaw: this.yaw, pitch: this.pitch }; }
 
   dispose() {
-    this.stop();
-    this.disableGyro();
+    this.stop(); this.disableGyro();
     if (this.currentTexture) this.currentTexture.dispose();
     this.renderer.dispose();
   }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }

@@ -94,14 +94,17 @@ export function showHelp() {
   const wrap = mount(`
     <h2>How SiteWalk works</h2>
     <div class="help-body">
-      <p><strong>1. Shoot your 360s.</strong> Use the Insta360 app to capture each spot in your space. Stand in the middle of a room or hallway, one shot every few metres.</p>
+      <p><strong>1. Shoot your 360s.</strong> Use the Insta360 app to capture each spot. Stand in the middle of a room or hallway, one shot every few metres.</p>
       <p><strong>2. Export as equirectangular.</strong> In the Insta360 app, export/share each shot as a flat <em>equirectangular</em> photo (the 2:1 "stretched" image) to your phone's photos.</p>
-      <p><strong>3. Import here.</strong> Open a tour → <em>Shots</em> tab → <strong>+</strong>, and pick the photos. You can select several at once.</p>
-      <p><strong>4. Connect the walk.</strong> Open a shot, aim at a doorway, tap <code>➤</code> and choose the shot that's through it. Those arrows let you walk the space.</p>
-      <p><strong>5. Lay out the floor plan.</strong> On the <em>Floor plan</em> tab, optionally set a floor-plan image, then place each shot as a dot. Tap a dot to jump there.</p>
-      <p><strong>6. Add notes.</strong> Tap <code>📌</code> to drop a note on a wall, defect, or piece of equipment.</p>
-      <p class="muted tiny">Everything is stored on your phone and works offline. Use the ⋮ menu on a tour to export a single file you can back up or send to someone.</p>
-      <p class="muted tiny">Note: SiteWalk can't control the Insta360 camera directly (that's Insta360's own app), and it doesn't build an automatic 3D mesh like Matterport's dollhouse — it builds a fast, connected 360° walkthrough from your photos.</p>
+      <p><strong>3. Import here.</strong> Open a tour → <em>Shots</em> → <strong>+</strong>, and pick the photos (several at once is fine).</p>
+      <p><strong>4. Connect the walk (two-way).</strong> In a shot, tap <code>➤</code>, tap the floor toward a doorway, pick the shot through it, then turn to the view you'll see when you arrive and hit <em>✓ Set view</em>. SiteWalk creates the arrow <em>and</em> a matching arrow back. Tap a floor arrow to walk; tap <code>↩</code> (top-left) to step back.</p>
+      <p><strong>5. Notes with priority.</strong> Tap <code>📌</code>, place it, type the note and pick <span style="color:#ef4444">High</span> / <span style="color:#f59e0b">Medium</span> / <span style="color:#22c55e">Low</span> — the pin takes that color.</p>
+      <p><strong>6. Measurements.</strong> Tap <code>📏</code>, tap the two ends of what you measured, and log the number + label. It's stored on the shot with a labeled line.</p>
+      <p><strong>7. Manage a stop.</strong> Tap <code>☰</code> to edit/delete any arrow, note or measurement, or to re-set an arrow's arrival view.</p>
+      <p><strong>8. Revise a photo.</strong> <em>Shots</em> → ⋮ on a shot → <em>Replace photo</em> keeps all its arrows, notes and floor-plan spot.</p>
+      <p><strong>9. Floor plan.</strong> On <em>Floor plan</em>, optionally set a plan image, then place each shot as a dot; tap a dot to jump there.</p>
+      <p class="muted tiny">Everything is stored on your phone and works offline. Use ⋮ on a tour to export one file you can back up or send.</p>
+      <p class="muted tiny">Note: measurements are the values you record with your own tape/laser (a single 360 photo has no depth to auto-measure). SiteWalk can't control the Insta360 directly, and it doesn't build a 3D dollhouse mesh — it builds a fast, connected 360° walkthrough.</p>
     </div>
     <div class="row"><button class="btn primary" data-act="ok">Got it</button></div>`);
   wrap.querySelector('[data-act=ok]').onclick = () => close(wrap);
