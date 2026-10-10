@@ -34,8 +34,9 @@ your phone.
 - **Revise a photo** — replace a shot's image while keeping all its arrows,
   notes and floor-plan position.
 - **Multiple floors** — organize a building into floors (bookmarks). Each floor
-  has its own floor-plan image and its own shots; importing always lands on the
-  floor you're viewing, so levels never get mixed up.
+  has its own floor-plan image and its own shots. When you have more than one
+  floor, importing **prompts which floor** to drop the photos on (defaulting to
+  the one you're viewing), so levels never get mixed up.
 - **Floor plan** — set each floor's plan image, then place its shots as numbered
   dots. Tap a dot to jump there; links between shots are drawn for you.
 - **Punch-list PDF** — export every pinned task to a PDF, each with a photo of

@@ -103,7 +103,7 @@ export function showHelp() {
       <p><strong>7. Delete an arrow.</strong> Long-press a floor arrow to delete it (this direction, or both directions). You can also manage everything from <code>☰</code>.</p>
       <p><strong>8. Manage a stop.</strong> Tap <code>☰</code> to edit/delete any arrow, note or measurement, or to re-set an arrow's arrival view.</p>
       <p><strong>9. Revise a photo.</strong> <em>Shots</em> → ⋮ on a shot → <em>Replace photo</em> keeps all its arrows, notes and floor-plan spot.</p>
-      <p><strong>10. Floors.</strong> Use the floor tabs (bookmarks) on <em>Shots</em> and <em>Floor plan</em> to keep each level separate. Tap <em>＋ Floor</em> to add one, then import shots — they land on the floor you're viewing, so levels never get mixed up. Give each floor its own plan image.</p>
+      <p><strong>10. Floors.</strong> Use the floor tabs (bookmarks) on <em>Shots</em> and <em>Floor plan</em> to keep each level separate. Tap <em>＋ Floor</em> to add one, then import shots. When you have more than one floor, importing first asks <em>which floor</em> to put the photos on (defaulting to the one you're viewing), so levels never get mixed up. Give each floor its own plan image.</p>
       <p><strong>11. Floor plan.</strong> On <em>Floor plan</em>, set that floor's plan image, then place each shot as a dot; tap a dot to jump there.</p>
       <p><strong>12. Punch list PDF.</strong> On <em>Shots</em>, tap <em>Tasks → PDF</em> to export every pinned note as a PDF — each task with a photo of the exact spot, its priority and location.</p>
       <p class="muted tiny">Everything is stored on your phone and works offline. Use ⋮ on a tour to export one file you can back up or send.</p>

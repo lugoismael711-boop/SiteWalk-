@@ -48,6 +48,7 @@ let floorMap = null;
 let placeType = null;
 let replaceTargetId = null;
 let aimResolver = null;
+let pendingImportFloorId = null;
 
 /* -------------------- refs -------------------- */
 const el = (id) => document.getElementById(id);
@@ -69,8 +70,8 @@ function wireGlobal() {
   btnBack.onclick = () => { if (state.view === 'project') goProjects(); };
 
   el('btnNewProject').onclick = newProject;
-  el('btnAddFirst').onclick = () => el('fileScene').click();
-  el('btnAddShot').onclick = () => el('fileScene').click();
+  el('btnAddFirst').onclick = startImport;
+  el('btnAddShot').onclick = startImport;
 
   document.querySelectorAll('.tab').forEach((t) => { t.onclick = () => switchTab(t.dataset.tab); });
 
@@ -799,9 +800,29 @@ async function sceneMenu(scene) {
 /* ============================================================
    File handling
    ============================================================ */
+/* Ask which floor the incoming photos should land on, then open the picker. */
+async function startImport() {
+  if (!state.project) return;
+  let floorId = state.currentFloorId;
+  const floors = state.project.floors || [];
+  if (floors.length > 1) {
+    const items = floors.map((f) => ({
+      id: f.id,
+      label: `${f.name}${f.id === state.currentFloorId ? '  (current)' : ''} · ${scenesOnFloor(f.id).length} shot(s)`,
+    }));
+    const chosen = await UI.chooseFromList({ title: 'Import onto which floor?', items });
+    if (!chosen) return;
+    floorId = chosen;
+  }
+  pendingImportFloorId = floorId;
+  el('fileScene').click();
+}
+
 async function handleSceneFiles(fileList) {
   const files = Array.from(fileList || []);
   el('fileScene').value = '';
+  const targetFloorId = pendingImportFloorId || state.currentFloorId;
+  pendingImportFloorId = null;
   if (!files.length || !state.project) return;
   UI.toast(`Importing ${files.length} photo${files.length === 1 ? '' : 's'}…`, 4000);
   let warned = false;
@@ -815,7 +836,7 @@ async function handleSceneFiles(fileList) {
         id: DB.uid('s_'), projectId: state.project.id,
         name: file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Shot',
         order: state.scenes.length, imageId, thumbId,
-        floorId: state.currentFloorId,
+        floorId: targetFloorId,
         initYaw: 0, initPitch: 0, map: null, hotspots: [],
       };
       await DB.putScene(scene);
@@ -824,12 +845,19 @@ async function handleSceneFiles(fileList) {
       if (!state.currentSceneId) state.currentSceneId = scene.id;
     } catch (err) { console.error(err); UI.toast(`Couldn't import ${file.name}`); }
   }
+  // Follow the import to the floor the photos landed on.
+  if (targetFloorId && targetFloorId !== state.currentFloorId) {
+    state.currentFloorId = targetFloorId;
+    state.project.currentFloorId = targetFloorId;
+  }
   await DB.putProject(state.project);
   state.selectedForMap = state.currentSceneId;
+  renderFloorBars();
   renderGrid();
   await refreshCurrentScene();
   refreshMap();
-  UI.toast('Done. Open a shot and tap ➤ to connect the walk.', 3500);
+  const fn = currentFloor() ? currentFloor().name : '';
+  UI.toast(`Added to ${fn}. Open a shot and tap ➤ to connect the walk.`, 3500);
 }
 
 async function handleReplaceFile(file) {
