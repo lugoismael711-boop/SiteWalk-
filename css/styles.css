@@ -325,3 +325,43 @@ html, body {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .empty-note { color: var(--muted); text-align: center; padding: 40px 20px; }
+#projectList .empty-note { grid-column: 1 / -1; }
+
+/* ---------- Drag & drop (desktop) ---------- */
+.drop-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(14,17,22,0.86); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.drop-inner {
+  border: 3px dashed var(--accent); border-radius: 18px;
+  padding: 48px 64px; text-align: center; color: var(--text);
+}
+.drop-inner .big-emoji { font-size: 52px; }
+.drop-inner p { font-size: 18px; font-weight: 600; margin: 10px 0 0; }
+
+/* Hide the phone-only gyro control on non-touch (desktop) devices. */
+body.no-touch #btnGyro { display: none; }
+
+/* ---------- Desktop layout polish ---------- */
+@media (min-width: 900px) and (pointer: fine) {
+  #view-projects { align-items: center; padding: 28px 24px calc(var(--safe-bottom) + 90px); }
+  .hero, #projectList { width: 100%; max-width: 1180px; }
+  .hero h1 { font-size: 28px; }
+  .card-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .project-card .thumb { height: 170px; }
+
+  /* Roomier management panes, centered content. */
+  .shot-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); max-width: 1180px; margin: 0 auto; width: 100%; }
+  .shot-cell .sh-thumb { height: 150px; }
+
+  /* Bigger, hover-friendly HUD buttons. */
+  .hud-btn { width: 52px; height: 52px; }
+  .hud-btn:hover { background: var(--accent); border-color: var(--accent); }
+  .fab:hover { filter: brightness(1.08); }
+  .project-card:hover { border-color: var(--accent); }
+
+  /* The install button reads better with a little breathing room. */
+  #btnInstall { margin-right: 4px; }
+}

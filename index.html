@@ -31,6 +31,7 @@
       <button id="btnBack" class="icon-btn" aria-label="Back" hidden>‹</button>
       <div id="title" class="title">SiteWalk</div>
       <div class="spacer"></div>
+      <button id="btnInstall" class="btn small" hidden>Install app</button>
       <button id="btnHelp" class="icon-btn" aria-label="Help">?</button>
     </header>
 
@@ -121,6 +122,13 @@
   <input id="fileReplace" type="file" accept="image/*" hidden />
   <input id="fileFloor" type="file" accept="image/*" hidden />
   <input id="fileImport" type="file" accept="application/json,.sitewalk,.json" hidden />
+
+  <div id="dropOverlay" class="drop-overlay" hidden>
+    <div class="drop-inner">
+      <div class="big-emoji">⬇</div>
+      <p>Drop 360° photos to import</p>
+    </div>
+  </div>
 
   <div id="toast" class="toast" hidden></div>
 

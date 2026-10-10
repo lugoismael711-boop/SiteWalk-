@@ -83,6 +83,14 @@ Safari/Chrome, then "Add to Home Screen" to install it as an app. Two easy hosts
 > A service worker + camera-roll access require **HTTPS** (or `localhost`), so
 > open the hosted URL rather than a `file://` path on your phone.
 
+**On a computer (desktop):** open the same hosted URL in **Chrome or Edge** and
+click **Install app** in the top bar for a standalone desktop window. On desktop
+you can **drag & drop** exported photos onto the window to import them, walk with
+the **mouse** (drag to look, scroll to zoom, click the floor target to move) or
+the **keyboard** (arrow keys look, `+`/`-` zoom, Backspace to go back). The
+layout widens to use the screen, and the phone-only motion (gyro) control is
+hidden.
+
 **Locally, to try it on a computer:**
 
 ```bash

@@ -514,6 +514,10 @@ export class PanoramaViewer {
 
   getLook() { return { yaw: this.yaw, pitch: this.pitch }; }
 
+  /* Keyboard helpers (desktop). */
+  lookBy(dyaw, dpitch) { if (this._gyroEnabled) return; this.yaw += dyaw; this.pitch += dpitch; this._clampPitch(); }
+  zoomBy(d) { this.fov = Math.min(MAX_FOV, Math.max(MIN_FOV, this.fov + d)); this.camera.fov = this.fov; this.camera.updateProjectionMatrix(); }
+
   dispose() {
     this.stop(); this.disableGyro();
     if (this.currentTexture) this.currentTexture.dispose();

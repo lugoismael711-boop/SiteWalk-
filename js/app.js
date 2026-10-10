@@ -59,7 +59,67 @@ const btnBack = el('btnBack');
 async function boot() {
   registerSW();
   wireGlobal();
+  setupDesktop();
   await renderProjects();
+}
+
+/* ============================================================
+   Desktop support: install prompt, keyboard, drag & drop
+   ============================================================ */
+let deferredInstall = null;
+function setupDesktop() {
+  const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  if (!isTouch) document.body.classList.add('no-touch');
+
+  // Install-as-app button (Chrome/Edge desktop & Android; not iOS Safari).
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault(); deferredInstall = e; el('btnInstall').hidden = false;
+  });
+  el('btnInstall').onclick = async () => {
+    if (!deferredInstall) return;
+    deferredInstall.prompt();
+    await deferredInstall.userChoice.catch(() => {});
+    deferredInstall = null; el('btnInstall').hidden = true;
+  };
+  window.addEventListener('appinstalled', () => { el('btnInstall').hidden = true; });
+
+  // Keyboard controls while walking.
+  document.addEventListener('keydown', (e) => {
+    if (state.view !== 'project' || state.tab !== 'tour' || !viewer) return;
+    const t = e.target;
+    if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    if (document.querySelector('.modal-backdrop')) return;
+    const step = 0.08;
+    switch (e.key) {
+      case 'ArrowLeft': viewer.lookBy(-step, 0); break;
+      case 'ArrowRight': viewer.lookBy(step, 0); break;
+      case 'ArrowUp': viewer.lookBy(0, step); break;
+      case 'ArrowDown': viewer.lookBy(0, -step); break;
+      case '+': case '=': viewer.zoomBy(-4); break;
+      case '-': case '_': viewer.zoomBy(4); break;
+      case 'Backspace': if (state.history.length) { e.preventDefault(); navBack(); } break;
+      default: return;
+    }
+  });
+
+  // Drag & drop photo import.
+  const ov = el('dropOverlay');
+  const hasFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  let depth = 0;
+  window.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth++; if (state.project) ov.hidden = false; });
+  window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+  window.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; depth = Math.max(0, depth - 1); if (!depth) ov.hidden = true; });
+  window.addEventListener('drop', async (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); depth = 0; ov.hidden = true;
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
+    if (!files.length) return;
+    if (!state.project) { UI.toast('Open a tour first, then drop photos in.'); return; }
+    const floorId = await chooseImportFloor();
+    if (floorId === null) return;
+    pendingImportFloorId = floorId;
+    handleSceneFiles(files);
+  });
 }
 function registerSW() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(() => {});
@@ -808,20 +868,22 @@ async function sceneMenu(scene) {
 /* ============================================================
    File handling
    ============================================================ */
+/* Returns the floor id to import onto (prompting when >1 floor), or null if cancelled. */
+async function chooseImportFloor() {
+  const floors = state.project.floors || [];
+  if (floors.length <= 1) return state.currentFloorId;
+  const items = floors.map((f) => ({
+    id: f.id,
+    label: `${f.name}${f.id === state.currentFloorId ? '  (current)' : ''} · ${scenesOnFloor(f.id).length} shot(s)`,
+  }));
+  return UI.chooseFromList({ title: 'Import onto which floor?', items });
+}
+
 /* Ask which floor the incoming photos should land on, then open the picker. */
 async function startImport() {
   if (!state.project) return;
-  let floorId = state.currentFloorId;
-  const floors = state.project.floors || [];
-  if (floors.length > 1) {
-    const items = floors.map((f) => ({
-      id: f.id,
-      label: `${f.name}${f.id === state.currentFloorId ? '  (current)' : ''} · ${scenesOnFloor(f.id).length} shot(s)`,
-    }));
-    const chosen = await UI.chooseFromList({ title: 'Import onto which floor?', items });
-    if (!chosen) return;
-    floorId = chosen;
-  }
+  const floorId = await chooseImportFloor();
+  if (floorId === null) return;
   pendingImportFloorId = floorId;
   el('fileScene').click();
 }
