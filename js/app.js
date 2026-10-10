@@ -340,8 +340,15 @@ async function refreshCurrentScene(view) {
   if (state.tab === 'tour') viewer.start();
 }
 
-async function goToScene(id, view, { record = true } = {}) {
+async function goToScene(id, view, { record = true, transition = false, fromDir = null } = {}) {
   if (record && state.currentSceneId && state.currentSceneId !== id) state.history.push(state.currentSceneId);
+  // Street-View-style glide: zoom toward the travel direction and fade out
+  // before swapping the panorama, then settle in. Only when already walking.
+  const doTransition = transition && viewer && viewer._running && state.tab === 'tour';
+  if (doTransition) {
+    const look = viewer.getLook();
+    await viewer.moveOut(fromDir ? fromDir.yaw : look.yaw, fromDir ? fromDir.pitch : look.pitch);
+  }
   state.currentSceneId = id;
   state.selectedForMap = id;
   // Follow the shot to its floor so the map/grid context stays in sync.
@@ -354,13 +361,14 @@ async function goToScene(id, view, { record = true } = {}) {
   }
   await refreshCurrentScene(view);
   if (state.tab !== 'tour') switchTab('tour');
+  if (doTransition) viewer.moveIn();
   if (floorMap) floorMap.setSelected(id);
 }
 
 function navBack() {
   if (!state.history.length) return;
   const prev = state.history.pop();
-  goToScene(prev, undefined, { record: false });
+  goToScene(prev, undefined, { record: false, transition: true });
 }
 function updateBackButton() { el('btnNavBack').hidden = state.history.length === 0; }
 
@@ -369,7 +377,7 @@ async function onHotspotActivate(data) {
   if (data.type === 'nav') {
     if (data.targetSceneId) {
       const view = (data.landingYaw != null) ? { yaw: data.landingYaw, pitch: data.landingPitch } : undefined;
-      goToScene(data.targetSceneId, view);
+      goToScene(data.targetSceneId, view, { transition: true, fromDir: { yaw: data.yaw, pitch: data.pitch } });
     }
   } else if (data.type === 'note') {
     noteViewModal(data);

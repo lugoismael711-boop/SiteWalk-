@@ -15,10 +15,12 @@ your phone.
   app to your camera roll, then pick them here (multiple at once).
 - **True 360° viewing** — drag, pinch-to-zoom, or use your phone's motion sensor
   (gyro) to look around each spot.
-- **Walk the space, both ways** — drop a **path arrow** (➤) on the floor toward a
-  doorway and pick the shot through it. SiteWalk creates the forward arrow **and
-  a matching arrow back**, so you're never stuck. A **Back** button (↩) also
-  steps through your history at any time.
+- **Walk the space, both ways** — drop a **floor target** (➤) toward a doorway
+  and pick the shot through it. A Street-View-style **round reticle appears on
+  the ground**; tap it to **glide forward** into that spot (smooth zoom + fade,
+  not a hard jump). SiteWalk creates the forward path **and a matching path
+  back**, so you're never stuck, and a **Back** button (↩) steps through your
+  history anytime.
 - **Choose the arrival view** — when you link two shots you set the exact
   direction you'll be facing when you arrive (and when you come back), so the
   walk flows naturally.
@@ -27,7 +29,7 @@ your phone.
 - **Measurements** — mark two points with the measure tool (📏) and log the
   distance you measured (with your tape/laser) plus a label. Stored on the shot
   as a labeled line.
-- **Delete arrows** — long-press a floor arrow to remove it (this direction or
+- **Delete paths** — long-press a floor target to remove it (this direction or
   both), or manage everything from the ☰ panel.
 - **Manage any stop** — the ☰ panel lists every arrow, note and measurement on a
   shot so you can edit, delete, or re-set an arrow's arrival view.

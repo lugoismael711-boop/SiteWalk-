@@ -6,7 +6,7 @@
    here. Bump CACHE_VERSION to force clients to update.
    ============================================================ */
 
-const CACHE_VERSION = 'sitewalk-v4';
+const CACHE_VERSION = 'sitewalk-v5';
 const APP_SHELL = [
   './',
   './index.html',

@@ -76,10 +76,47 @@ export class PanoramaViewer {
     this._gyroEnabled = false;
     this._gyroQuat = new THREE.Quaternion();
 
+    // Fade overlay for Street-View-style move transitions.
+    this._fadeEl = document.createElement('div');
+    Object.assign(this._fadeEl.style, {
+      position: 'absolute', inset: '0', background: '#000', opacity: '0',
+      pointerEvents: 'none', transition: 'opacity 260ms ease', zIndex: '5',
+    });
+    if (this.canvas.parentElement) this.canvas.parentElement.appendChild(this._fadeEl);
+    this._tween = null;
+
     this._bindInput();
     this._resize();
     this._running = false;
     window.addEventListener('resize', () => this._resize());
+  }
+
+  /* ---- Street-View-style move transition ---- */
+  _fade(to) { if (this._fadeEl) this._fadeEl.style.opacity = String(to); }
+
+  // Zoom toward the travel direction + fade to black. Resolves when dark.
+  moveOut(yaw, pitch) {
+    const yawTo = this.yaw + shortestAngle(this.yaw, yaw);
+    this._fade(1);
+    return new Promise((resolve) => {
+      this._tween = { fovFrom: this.fov, fovTo: 36, yawFrom: this.yaw, yawTo,
+        pitchFrom: this.pitch, pitchTo: pitch, t0: performance.now(), dur: 300 };
+      setTimeout(() => {
+        this.fov = 36; this.camera.fov = 36; this.camera.updateProjectionMatrix();
+        this._tween = null; resolve();
+      }, 300);
+    });
+  }
+  // Arrive slightly wide, settle to normal, and fade back in.
+  moveIn() {
+    this.fov = 86; this.camera.fov = 86; this.camera.updateProjectionMatrix();
+    this._tween = { fovFrom: 86, fovTo: 70, yawFrom: this.yaw, yawTo: this.yaw,
+      pitchFrom: this.pitch, pitchTo: this.pitch, t0: performance.now(), dur: 340 };
+    this._fade(0);
+    setTimeout(() => {
+      this.fov = 70; this.camera.fov = 70; this.camera.updateProjectionMatrix();
+      this._tween = null;
+    }, 350);
   }
 
   /* -------------------- lifecycle -------------------- */
@@ -176,24 +213,35 @@ export class PanoramaViewer {
   }
 
   _navTexture() {
-    const s = 256;
+    // Street-View-style floor reticle: a dashed outer ring, a solid inner
+    // ring, and a center dot — reads as a "move here" target on the ground.
+    const s = 256, cx = s / 2, cy = s / 2;
     const c = document.createElement('canvas'); c.width = c.height = s;
     const ctx = c.getContext('2d');
     ctx.clearRect(0, 0, s, s);
-    // soft ring
-    ctx.beginPath(); ctx.arc(s/2, s/2, s*0.42, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(59,130,246,0.35)'; ctx.fill();
-    ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
-    // double chevron pointing "up" in texture (=> outward along yaw)
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 22; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    for (let i = 0; i < 2; i++) {
-      const off = i * 46;
-      ctx.beginPath();
-      ctx.moveTo(s*0.30, s*0.60 - off);
-      ctx.lineTo(s*0.50, s*0.40 - off);
-      ctx.lineTo(s*0.70, s*0.60 - off);
-      ctx.stroke();
-    }
+    ctx.lineCap = 'round';
+
+    // faint filled disc for presence on busy floors
+    ctx.beginPath(); ctx.arc(cx, cy, s * 0.46, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fill();
+
+    // dashed outer ring
+    ctx.save();
+    ctx.setLineDash([18, 16]);
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+    ctx.beginPath(); ctx.arc(cx, cy, s * 0.44, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+
+    // solid inner ring (slight blue)
+    ctx.lineWidth = 12;
+    ctx.strokeStyle = 'rgba(96,165,250,0.95)';
+    ctx.beginPath(); ctx.arc(cx, cy, s * 0.24, 0, Math.PI * 2); ctx.stroke();
+
+    // center dot
+    ctx.beginPath(); ctx.arc(cx, cy, s * 0.07, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
+
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     return t;
   }
@@ -449,6 +497,17 @@ export class PanoramaViewer {
   }
 
   _update() {
+    if (this._tween) {
+      const tw = this._tween;
+      const k = Math.min(1, (performance.now() - tw.t0) / tw.dur);
+      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; // easeInOut
+      this.fov = lerp(tw.fovFrom, tw.fovTo, e);
+      if (!this._gyroEnabled) {
+        this.yaw = lerp(tw.yawFrom, tw.yawTo, e);
+        this.pitch = lerp(tw.pitchFrom, tw.pitchTo, e);
+      }
+      this.camera.fov = this.fov; this.camera.updateProjectionMatrix();
+    }
     if (this._gyroEnabled) this.camera.quaternion.copy(this._gyroQuat);
     else this.camera.lookAt(dirFromYawPitch(this.yaw, this.pitch));
   }
@@ -460,6 +519,14 @@ export class PanoramaViewer {
     if (this.currentTexture) this.currentTexture.dispose();
     this.renderer.dispose();
   }
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+function shortestAngle(from, to) {
+  let d = (to - from) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
 }
 
 function roundRect(ctx, x, y, w, h, r) {
