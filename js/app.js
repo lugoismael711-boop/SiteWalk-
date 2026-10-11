@@ -7,6 +7,7 @@ import { processPanorama, processImage } from './image.js';
 import { PanoramaViewer } from './viewer.js';
 import { FloorMap } from './map.js';
 import { exportTasksPDF } from './export.js';
+import * as Sync from './sync.js';
 import * as UI from './ui.js';
 
 /* -------------------- object-URL cache -------------------- */
@@ -60,8 +61,117 @@ async function boot() {
   registerSW();
   wireGlobal();
   setupDesktop();
+  setupSync();
   await renderProjects();
 }
+
+/* ============================================================
+   Cloud sync (opt-in; only active when firebase-config is filled)
+   ============================================================ */
+let syncStatus = 'idle';
+function setupSync() {
+  const btn = el('btnAccount');
+  if (!Sync.available()) { btn.hidden = true; return; }
+  btn.hidden = false;
+  btn.onclick = accountModal;
+
+  Sync.onAuth((user) => {
+    if (user) {
+      btn.textContent = accountLabel(user);
+      btn.classList.add('signed-in');
+    } else {
+      btn.textContent = 'Sign in';
+      btn.classList.remove('signed-in');
+    }
+  });
+  Sync.onStatus((s) => {
+    syncStatus = s;
+    const u = Sync.currentUser();
+    if (!u) return;
+    const base = accountLabel(u);
+    el('btnAccount').textContent = s === 'syncing' ? '⟳ Syncing…' : (s === 'error' ? '⚠ ' + base : base);
+  });
+  Sync.onChanged(async () => {
+    // Remote brought in changes — refresh whatever is on screen.
+    if (state.view === 'projects') renderProjects();
+    else if (state.project) {
+      state.scenes = await DB.listScenes(state.project.id);
+      const p = await DB.getProject(state.project.id);
+      if (p) state.project = p;
+      renderFloorBars(); renderGrid(); refreshMap();
+    }
+  });
+
+  Sync.init().catch((e) => { console.error(e); UI.toast('Cloud sync unavailable'); });
+}
+
+function accountLabel(user) {
+  const who = user.email || 'Account';
+  return who.length > 18 ? who.slice(0, 16) + '…' : who;
+}
+
+async function accountModal() {
+  const user = Sync.currentUser();
+  if (user) {
+    const { close, q } = UI.customModal(`
+      <h2>Signed in</h2>
+      <p class="muted">${UI.escapeHtml(user.email || '')}</p>
+      <p class="tiny muted">Your tours sync to the cloud and stay in step across your phone and desktop. ${syncStatus === 'error' ? '<br/><span style="color:var(--danger)">Last sync hit an error — check your connection.</span>' : ''}</p>
+      <div class="row spread">
+        <button class="btn small" data-a="sync">Sync now</button>
+        <div><button class="btn small danger" data-a="out">Sign out</button>
+          <button class="btn primary small" data-a="close">Close</button></div>
+      </div>`);
+    q('[data-a=close]').onclick = close;
+    q('[data-a=sync]').onclick = () => { UI.toast('Syncing…'); Sync.run().then(() => UI.toast('Synced')); };
+    q('[data-a=out]').onclick = async () => { close(); await Sync.signOutUser(); UI.toast('Signed out'); };
+    return;
+  }
+  // Signed out: sign in / sign up form.
+  let mode = 'in';
+  const render = () => {
+    const { close, q, wrap } = UI.customModal(`
+      <h2>${mode === 'in' ? 'Sign in' : 'Create account'}</h2>
+      <p class="tiny muted">Use the same login on your phone and desktop to keep tours in sync.</p>
+      <div class="field"><label>Email</label><input id="_em" type="text" inputmode="email" placeholder="you@company.com" /></div>
+      <div class="field"><label>Password</label><input id="_pw" type="password" placeholder="••••••••" /></div>
+      <div class="row spread">
+        <button class="btn small" data-a="toggle">${mode === 'in' ? 'Create account' : 'Have an account? Sign in'}</button>
+        <button class="btn primary small" data-a="go">${mode === 'in' ? 'Sign in' : 'Create'}</button>
+      </div>
+      <div class="row"><button class="btn small" data-a="google">Continue with Google</button>
+        <button class="btn" data-a="cancel">Cancel</button></div>`);
+    q('[data-a=cancel]').onclick = close;
+    q('[data-a=toggle]').onclick = () => { close(); mode = mode === 'in' ? 'up' : 'in'; render(); };
+    q('[data-a=go]').onclick = async () => {
+      const email = q('#_em').value.trim(); const pw = q('#_pw').value;
+      if (!email || !pw) { UI.toast('Enter email and password'); return; }
+      try {
+        UI.toast(mode === 'in' ? 'Signing in…' : 'Creating account…');
+        if (mode === 'in') await Sync.signIn(email, pw); else await Sync.signUp(email, pw);
+        close(); UI.toast('Signed in — syncing');
+      } catch (e) { UI.toast(friendlyAuthError(e)); }
+    };
+    q('[data-a=google]').onclick = async () => {
+      try { await Sync.signInGoogle(); close(); UI.toast('Signed in — syncing'); }
+      catch (e) { UI.toast(friendlyAuthError(e)); }
+    };
+  };
+  render();
+}
+
+function friendlyAuthError(e) {
+  const c = (e && e.code) || '';
+  if (c.includes('invalid-credential') || c.includes('wrong-password') || c.includes('user-not-found')) return 'Wrong email or password';
+  if (c.includes('email-already-in-use')) return 'That email already has an account — sign in instead';
+  if (c.includes('weak-password')) return 'Password should be at least 6 characters';
+  if (c.includes('invalid-email')) return 'That email looks invalid';
+  if (c.includes('popup')) return 'Sign-in popup was closed';
+  return 'Sign-in failed — check your connection';
+}
+
+/* Nudge a cloud sync after local changes (no-op when signed out / disabled). */
+function syncSoon() { if (Sync.available() && Sync.currentUser()) Sync.run(); }
 
 /* ============================================================
    Desktop support: install prompt, keyboard, drag & drop
@@ -575,6 +685,7 @@ async function saveScene(scene) {
   await DB.putScene(scene);
   await DB.putProject(state.project);
   if (scene.id === state.currentSceneId) viewer.setHotspots(scene.hotspots || []);
+  syncSoon();
 }
 
 /* ============================================================
@@ -928,6 +1039,7 @@ async function handleSceneFiles(fileList) {
   refreshMap();
   const fn = currentFloor() ? currentFloor().name : '';
   UI.toast(`Added to ${fn}. Open a shot and tap ➤ to connect the walk.`, 3500);
+  syncSoon();
 }
 
 async function handleReplaceFile(file) {
@@ -944,9 +1056,11 @@ async function handleReplaceFile(file) {
     scene.imageId = await DB.putBlob(DB.uid('b_'), full);
     scene.thumbId = await DB.putBlob(DB.uid('b_'), thumb);
     await DB.putScene(scene);
+    await DB.putProject(state.project);
     renderGrid();
     if (scene.id === state.currentSceneId) await refreshCurrentScene();
     UI.toast('Photo replaced (arrows & notes kept)');
+    syncSoon();
   } catch (e) { console.error(e); UI.toast('Couldn\'t replace that photo'); }
 }
 
@@ -962,6 +1076,7 @@ async function handleFloorFile(file) {
     await DB.putProject(state.project);
     refreshMap();
     UI.toast(`Floor plan set for ${floor.name}`);
+    syncSoon();
   } catch (e) { UI.toast('Couldn\'t load that image'); }
 }
 
@@ -972,10 +1087,10 @@ function ensureMap() {
   if (floorMap) return;
   floorMap = new FloorMap(el('mapCanvas'));
   floorMap.onOpenScene = (id) => goToScene(id);
-  floorMap.onMoveScene = async (id, pos) => { const s = state.scenes.find((x) => x.id === id); if (s) { s.map = pos; await DB.putScene(s); } };
+  floorMap.onMoveScene = async (id, pos) => { const s = state.scenes.find((x) => x.id === id); if (s) { s.map = pos; await DB.putScene(s); await DB.putProject(state.project); syncSoon(); } };
   floorMap.onPlaceScene = async (id, pos) => {
     const s = state.scenes.find((x) => x.id === id);
-    if (s) { s.map = pos; await DB.putScene(s); floorMap.setData(scenesOnFloor(state.currentFloorId), floorMap.floorImage, state.selectedForMap); UI.toast('Placed'); }
+    if (s) { s.map = pos; await DB.putScene(s); await DB.putProject(state.project); floorMap.setData(scenesOnFloor(state.currentFloorId), floorMap.floorImage, state.selectedForMap); UI.toast('Placed'); syncSoon(); }
   };
 }
 async function refreshMap() {

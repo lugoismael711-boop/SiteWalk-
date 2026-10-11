@@ -344,6 +344,8 @@ html, body {
 /* Hide the phone-only gyro control on non-touch (desktop) devices. */
 body.no-touch #btnGyro { display: none; }
 
+#btnAccount.signed-in { border-color: var(--accent-2); color: var(--text); }
+
 /* ---------- Desktop layout polish ---------- */
 @media (min-width: 900px) and (pointer: fine) {
   #view-projects { align-items: center; padding: 28px 24px calc(var(--safe-bottom) + 90px); }

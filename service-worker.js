@@ -6,7 +6,7 @@
    here. Bump CACHE_VERSION to force clients to update.
    ============================================================ */
 
-const CACHE_VERSION = 'sitewalk-v6';
+const CACHE_VERSION = 'sitewalk-v7';
 const APP_SHELL = [
   './',
   './index.html',
@@ -18,6 +18,8 @@ const APP_SHELL = [
   './js/map.js',
   './js/ui.js',
   './js/export.js',
+  './js/sync.js',
+  './js/firebase-config.js',
   './js/vendor/three.module.min.js',
   './js/vendor/jspdf.umd.min.js',
   './manifest.webmanifest',

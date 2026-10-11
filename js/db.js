@@ -86,6 +86,13 @@ export async function putProject(project) {
   await reqAsPromise(store.put(project));
   return project;
 }
+/* Store a project exactly as given (keeps updatedAt) — used by cloud sync
+   so a pulled remote project doesn't get a fresh local timestamp. */
+export async function putProjectRaw(project) {
+  const store = await tx('projects', 'readwrite');
+  await reqAsPromise(store.put(project));
+  return project;
+}
 export async function createProject(name) {
   const floorId = uid('f_');
   const project = {
