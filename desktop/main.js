@@ -10,7 +10,7 @@
 
 const { app, BrowserWindow, shell, Menu } = require('electron');
 
-const APP_URL = process.env.SITEWALK_URL || 'https://lugoismael711-boop.github.io/SiteWalk-/';
+const APP_URL = process.env.SITEWALK_URL || 'https://sitewalk-462ee.web.app/';
 
 function createWindow() {
   const win = new BrowserWindow({

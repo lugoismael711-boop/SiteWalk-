@@ -128,6 +128,9 @@ async function accountModal() {
     return;
   }
   // Signed out: sign in / sign up form.
+  // The simple Google popup only works when the app is served from the same
+  // domain as Firebase Auth (Firebase Hosting: *.web.app / *.firebaseapp.com).
+  const onFirebaseHost = /(?:^|\.)(?:web\.app|firebaseapp\.com)$/.test(location.hostname);
   let mode = 'in';
   const render = () => {
     const { close, q, wrap } = UI.customModal(`
@@ -139,11 +142,17 @@ async function accountModal() {
         <button class="btn small" data-a="toggle">${mode === 'in' ? 'Create account' : 'Have an account? Sign in'}</button>
         <button class="btn primary small" data-a="go">${mode === 'in' ? 'Sign in' : 'Create account'}</button>
       </div>
-      ${Sync.googleAvailable() ? '<div style="display:flex;justify-content:center;margin-top:12px"><div id="_gbtn"></div></div>' : ''}
+      ${onFirebaseHost ? '<div class="row" style="justify-content:center"><button class="btn small" data-a="gpopup">Continue with Google</button></div>'
+        : (Sync.googleAvailable() ? '<div style="display:flex;justify-content:center;margin-top:12px"><div id="_gbtn"></div></div>' : '')}
       <div class="row"><button class="btn" data-a="cancel">Cancel</button></div>`);
     q('[data-a=cancel]').onclick = close;
     setTimeout(() => { const em = q('#_em'); if (em) em.focus(); }, 50);
-    if (Sync.googleAvailable()) {
+    if (onFirebaseHost) {
+      q('[data-a=gpopup]').onclick = async () => {
+        try { await Sync.signInGooglePopup(); close(); UI.toast('Signed in — syncing ✓'); }
+        catch (e) { console.error('[auth google]', e && e.code, e); UI.toast(friendlyAuthError(e), 6500); }
+      };
+    } else if (Sync.googleAvailable()) {
       Sync.renderGoogleButton(q('#_gbtn'),
         () => { close(); UI.toast('Signed in — syncing ✓'); },
         (e) => { console.error('[auth google]', e && e.code, e); UI.toast(friendlyAuthError(e), 6500); });

@@ -1,0 +1,28 @@
+name: Deploy to Firebase Hosting
+
+# Deploys the SiteWalk web app to Firebase Hosting (https://sitewalk-462ee.web.app)
+# on every push to main. Serving from the same domain as Firebase Auth makes
+# "Sign in with Google" work with a normal button (no cross-domain popup error).
+#
+# One-time setup: add a repo secret FIREBASE_SERVICE_ACCOUNT containing the JSON
+# from Firebase console → Project settings → Service accounts → Generate new
+# private key. See SETUP-SYNC.md.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Deploy
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          channelId: live
+          projectId: sitewalk-462ee

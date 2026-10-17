@@ -14,7 +14,8 @@
 
 export const FIREBASE_CONFIG = {
   apiKey: 'AIzaSyDh2y5xnbTBpiQ4o78cu0UaO1XI9n8X-Bo',
-  authDomain: 'sitewalk-462ee.firebaseapp.com',
+  // Match the Firebase Hosting domain so Google sign-in is same-origin (popup works).
+  authDomain: 'sitewalk-462ee.web.app',
   projectId: 'sitewalk-462ee',
   storageBucket: 'sitewalk-462ee.firebasestorage.app',
   messagingSenderId: '343698105733',

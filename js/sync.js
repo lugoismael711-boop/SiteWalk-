@@ -74,6 +74,14 @@ export async function signIn(email, password) {
   const m = await loadSdk();
   return m.auth.signInWithEmailAndPassword(fb.auth, email, password);
 }
+/* Simple Google popup — reliable when the app is served from the same domain
+   as authDomain (i.e. on Firebase Hosting). */
+export async function signInGooglePopup() {
+  const m = await loadSdk();
+  const provider = new m.auth.GoogleAuthProvider();
+  return m.auth.signInWithPopup(fb.auth, provider);
+}
+
 /* "Continue with Google" via Google Identity Services (works on any domain,
    unlike the cross-domain popup). Exchanges the Google ID token for a Firebase
    session with signInWithCredential — no popup, no cross-domain sessionStorage. */

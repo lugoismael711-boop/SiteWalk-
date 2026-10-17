@@ -72,6 +72,24 @@ service firebase.storage {
 ```
 Click **Publish** on each.
 
+## 6b. (Recommended) Host on Firebase so "Sign in with Google" works
+
+The app is also set up to deploy to **Firebase Hosting** at
+`https://sitewalk-462ee.web.app`. Serving from that domain makes Google
+sign-in work with a normal button (no cross-domain popup error). One-time:
+
+1. Firebase console → ⚙ **Project settings → Service accounts** →
+   **Generate new private key** → it downloads a `.json` file.
+2. GitHub → your repo → **Settings → Secrets and variables → Actions →
+   New repository secret**:
+   - **Name:** `FIREBASE_SERVICE_ACCOUNT`
+   - **Secret:** paste the **entire contents** of that `.json` file.
+3. (If the first deploy complains Hosting isn't set up) Firebase console →
+   **Build → Hosting → Get started** once to provision the default site.
+
+Every push to `main` then deploys to `https://sitewalk-462ee.web.app`. Use
+that URL on phone + desktop going forward (add it to your home screen).
+
 ## 7. Use it
 - Open SiteWalk on your **desktop**, click **Sign in**, create an account.
 - Open SiteWalk on your **phone**, **Sign in** with the same email/password.
