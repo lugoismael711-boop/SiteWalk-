@@ -17,7 +17,7 @@
    ============================================================ */
 
 import * as DB from './db.js';
-import { FIREBASE_CONFIG, FIREBASE_SDK_VERSION, firebaseEnabled } from './firebase-config.js';
+import { FIREBASE_CONFIG, FIREBASE_SDK_VERSION, GOOGLE_CLIENT_ID, firebaseEnabled } from './firebase-config.js';
 
 let mods = null;      // loaded Firebase SDK namespaces
 let fb = null;        // { app, auth, db, storage }
@@ -74,10 +74,42 @@ export async function signIn(email, password) {
   const m = await loadSdk();
   return m.auth.signInWithEmailAndPassword(fb.auth, email, password);
 }
-export async function signInGoogle() {
-  const m = await loadSdk();
-  const provider = new m.auth.GoogleAuthProvider();
-  return m.auth.signInWithPopup(fb.auth, provider);
+/* "Continue with Google" via Google Identity Services (works on any domain,
+   unlike the cross-domain popup). Exchanges the Google ID token for a Firebase
+   session with signInWithCredential — no popup, no cross-domain sessionStorage. */
+export function googleAvailable() { return !!GOOGLE_CLIENT_ID; }
+
+let _gisP = null;
+function loadGIS() {
+  if (window.google && window.google.accounts && window.google.accounts.id) return Promise.resolve();
+  if (_gisP) return _gisP;
+  _gisP = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.async = true; s.defer = true;
+    s.onload = resolve; s.onerror = () => reject(new Error('Could not load Google sign-in'));
+    document.head.appendChild(s);
+  });
+  return _gisP;
+}
+
+export async function renderGoogleButton(container, onSuccess, onError) {
+  if (!GOOGLE_CLIENT_ID || !fb) return;
+  const m = mods || (await loadSdk());
+  await loadGIS();
+  window.google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: async (resp) => {
+      try {
+        const cred = m.auth.GoogleAuthProvider.credential(resp.credential);
+        await m.auth.signInWithCredential(fb.auth, cred);
+        if (onSuccess) onSuccess();
+      } catch (e) { if (onError) onError(e); }
+    },
+  });
+  window.google.accounts.id.renderButton(container, {
+    theme: 'filled_blue', size: 'large', text: 'continue_with', shape: 'pill', width: 240,
+  });
 }
 export async function signOutUser() {
   const m = await loadSdk();

@@ -139,9 +139,15 @@ async function accountModal() {
         <button class="btn small" data-a="toggle">${mode === 'in' ? 'Create account' : 'Have an account? Sign in'}</button>
         <button class="btn primary small" data-a="go">${mode === 'in' ? 'Sign in' : 'Create account'}</button>
       </div>
+      ${Sync.googleAvailable() ? '<div style="display:flex;justify-content:center;margin-top:12px"><div id="_gbtn"></div></div>' : ''}
       <div class="row"><button class="btn" data-a="cancel">Cancel</button></div>`);
     q('[data-a=cancel]').onclick = close;
     setTimeout(() => { const em = q('#_em'); if (em) em.focus(); }, 50);
+    if (Sync.googleAvailable()) {
+      Sync.renderGoogleButton(q('#_gbtn'),
+        () => { close(); UI.toast('Signed in — syncing ✓'); },
+        (e) => { console.error('[auth google]', e && e.code, e); UI.toast(friendlyAuthError(e), 6500); });
+    }
     q('[data-a=toggle]').onclick = () => { close(); mode = mode === 'in' ? 'up' : 'in'; render(); };
     q('[data-a=go]').onclick = async () => {
       const email = q('#_em').value.trim(); const pw = q('#_pw').value;

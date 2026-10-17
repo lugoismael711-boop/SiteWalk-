@@ -24,6 +24,13 @@ export const FIREBASE_CONFIG = {
 /* Which Firebase JS SDK version to load from Google's CDN. */
 export const FIREBASE_SDK_VERSION = '10.12.0';
 
+/* OAuth Web client ID for "Continue with Google" via Google Identity Services.
+   Get it in Firebase → Authentication → Sign-in method → Google →
+   "Web SDK configuration" → Web client ID. Leave blank to hide the button.
+   The site's origin must also be added to that client's Authorized JavaScript
+   origins in Google Cloud Console (see SETUP-SYNC.md). */
+export const GOOGLE_CLIENT_ID = '';
+
 export function firebaseEnabled() {
   return !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId && FIREBASE_CONFIG.appId);
 }
