@@ -13,11 +13,12 @@
    ============================================================ */
 
 export const FIREBASE_CONFIG = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  appId: '',
+  apiKey: 'AIzaSyDh2y5xnbTBpiQ4o78cu0UaO1XI9n8X-Bo',
+  authDomain: 'sitewalk-462ee.firebaseapp.com',
+  projectId: 'sitewalk-462ee',
+  storageBucket: 'sitewalk-462ee.firebasestorage.app',
+  messagingSenderId: '343698105733',
+  appId: '1:343698105733:web:715067df583896844150ec',
 };
 
 /* Which Firebase JS SDK version to load from Google's CDN. */
