@@ -137,11 +137,11 @@ async function accountModal() {
       <div class="field"><label>Password</label><input id="_pw" type="password" placeholder="••••••••" /></div>
       <div class="row spread">
         <button class="btn small" data-a="toggle">${mode === 'in' ? 'Create account' : 'Have an account? Sign in'}</button>
-        <button class="btn primary small" data-a="go">${mode === 'in' ? 'Sign in' : 'Create'}</button>
+        <button class="btn primary small" data-a="go">${mode === 'in' ? 'Sign in' : 'Create account'}</button>
       </div>
-      <div class="row"><button class="btn small" data-a="google">Continue with Google</button>
-        <button class="btn" data-a="cancel">Cancel</button></div>`);
+      <div class="row"><button class="btn" data-a="cancel">Cancel</button></div>`);
     q('[data-a=cancel]').onclick = close;
+    setTimeout(() => { const em = q('#_em'); if (em) em.focus(); }, 50);
     q('[data-a=toggle]').onclick = () => { close(); mode = mode === 'in' ? 'up' : 'in'; render(); };
     q('[data-a=go]').onclick = async () => {
       const email = q('#_em').value.trim(); const pw = q('#_pw').value;
@@ -161,10 +161,8 @@ async function accountModal() {
         close(); UI.toast('Signed in — syncing ✓');
       } catch (e) { console.error('[auth]', e && e.code, e); UI.toast(friendlyAuthError(e), 6500); }
     };
-    q('[data-a=google]').onclick = async () => {
-      try { await Sync.signInGoogle(); close(); UI.toast('Signed in — syncing ✓'); }
-      catch (e) { console.error('[auth google]', e && e.code, e); UI.toast(friendlyAuthError(e), 6500); }
-    };
+    // Enter key submits.
+    const pwEl = q('#_pw'); if (pwEl) pwEl.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') q('[data-a=go]').click(); });
   };
   render();
 }
