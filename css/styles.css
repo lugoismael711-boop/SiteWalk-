@@ -295,7 +295,8 @@ html, body {
   color: var(--text); border-radius: 10px; padding: 12px; font-size: 16px;
 }
 .modal textarea { min-height: 80px; resize: vertical; }
-.modal .row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+.modal .row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; flex-wrap: wrap; }
+.modal .row.spread > div { display: flex; gap: 10px; flex-wrap: wrap; }
 .modal .row.spread { justify-content: space-between; }
 .modal .list-choice { display: flex; flex-direction: column; gap: 8px; max-height: 45vh; overflow-y: auto; }
 .modal .choice {
