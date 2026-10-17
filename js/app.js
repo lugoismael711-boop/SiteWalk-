@@ -148,13 +148,22 @@ async function accountModal() {
       if (!email || !pw) { UI.toast('Enter email and password'); return; }
       try {
         UI.toast(mode === 'in' ? 'Signing in…' : 'Creating account…');
-        if (mode === 'in') await Sync.signIn(email, pw); else await Sync.signUp(email, pw);
-        close(); UI.toast('Signed in — syncing');
-      } catch (e) { UI.toast(friendlyAuthError(e)); }
+        if (mode === 'in') {
+          await Sync.signIn(email, pw);
+        } else {
+          try { await Sync.signUp(email, pw); }
+          catch (e2) {
+            // Already have an account? Just sign in instead.
+            if (((e2 && e2.code) || '').includes('email-already-in-use')) await Sync.signIn(email, pw);
+            else throw e2;
+          }
+        }
+        close(); UI.toast('Signed in — syncing ✓');
+      } catch (e) { console.error('[auth]', e && e.code, e); UI.toast(friendlyAuthError(e), 6500); }
     };
     q('[data-a=google]').onclick = async () => {
-      try { await Sync.signInGoogle(); close(); UI.toast('Signed in — syncing'); }
-      catch (e) { UI.toast(friendlyAuthError(e)); }
+      try { await Sync.signInGoogle(); close(); UI.toast('Signed in — syncing ✓'); }
+      catch (e) { console.error('[auth google]', e && e.code, e); UI.toast(friendlyAuthError(e), 6500); }
     };
   };
   render();
@@ -163,11 +172,16 @@ async function accountModal() {
 function friendlyAuthError(e) {
   const c = (e && e.code) || '';
   if (c.includes('invalid-credential') || c.includes('wrong-password') || c.includes('user-not-found')) return 'Wrong email or password';
-  if (c.includes('email-already-in-use')) return 'That email already has an account — sign in instead';
-  if (c.includes('weak-password')) return 'Password should be at least 6 characters';
+  if (c.includes('email-already-in-use')) return 'That email already has an account — switch to "Sign in"';
+  if (c.includes('weak-password')) return 'Password must be at least 6 characters';
   if (c.includes('invalid-email')) return 'That email looks invalid';
-  if (c.includes('popup')) return 'Sign-in popup was closed';
-  return 'Sign-in failed — check your connection';
+  if (c.includes('operation-not-allowed')) return 'Email/Password isn\'t enabled in Firebase yet (Authentication → Sign-in method)';
+  if (c.includes('unauthorized-domain')) return 'This web address isn\'t authorized in Firebase (Authentication → Settings → Authorized domains)';
+  if (c.includes('network-request-failed')) return 'Network error — check your connection';
+  if (c.includes('too-many-requests')) return 'Too many attempts — wait a minute and try again';
+  if (c.includes('popup-closed') || c.includes('cancelled-popup') || c.includes('popup-blocked')) return 'Google popup was blocked or closed — allow pop-ups and retry';
+  // Unknown — surface the real code/message so we can diagnose.
+  return 'Sign-in failed: ' + (c || (e && e.message) || 'unknown error');
 }
 
 /* Nudge a cloud sync after local changes (no-op when signed out / disabled). */
